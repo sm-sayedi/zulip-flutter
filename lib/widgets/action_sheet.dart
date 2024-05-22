@@ -44,7 +44,7 @@ void showMessageActionSheet({required BuildContext context, required Message mes
           message: message,
           messageListContext: context,
         ),
-        CopyButton(message: message, messageListContext: context),
+        CopyMessageTextButton(message: message, messageListContext: context),
       ]);
     });
 }
@@ -330,8 +330,8 @@ class QuoteAndReplyButton extends MessageActionSheetMenuItemButton {
   };
 }
 
-class CopyButton extends MessageActionSheetMenuItemButton {
-  CopyButton({
+class CopyMessageTextButton extends MessageActionSheetMenuItemButton {
+  CopyMessageTextButton({
     super.key,
     required super.message,
     required super.messageListContext,
@@ -341,7 +341,7 @@ class CopyButton extends MessageActionSheetMenuItemButton {
 
   @override
   String label(ZulipLocalizations zulipLocalizations) {
-    return zulipLocalizations.actionSheetOptionCopy;
+    return zulipLocalizations.actionSheetOptionCopyMessageText;
   }
 
   @override get onPressed => (BuildContext context) async {
