@@ -6,6 +6,8 @@ import 'package:share_plus/share_plus.dart';
 import '../api/exception.dart';
 import '../api/model/model.dart';
 import '../api/route/messages.dart';
+import '../model/internal_link.dart';
+import '../model/narrow.dart';
 import 'clipboard.dart';
 import 'compose_box.dart';
 import 'dialog.dart';
@@ -45,6 +47,7 @@ void showMessageActionSheet({required BuildContext context, required Message mes
           messageListContext: context,
         ),
         CopyMessageTextButton(message: message, messageListContext: context),
+        CopyMessageLinkButton(message: message, messageListContext: context),
       ]);
     });
 }
@@ -364,5 +367,36 @@ class CopyMessageTextButton extends MessageActionSheetMenuItemButton {
     copyWithPopup(context: messageListContext,
       successContent: Text(zulipLocalizations.successMessageCopied),
       data: ClipboardData(text: rawContent));
+  };
+}
+
+class CopyMessageLinkButton extends MessageActionSheetMenuItemButton {
+  CopyMessageLinkButton({
+    super.key,
+    required super.message,
+    required super.messageListContext,
+  });
+
+  @override get icon => Icons.link;
+
+  @override
+  String label(ZulipLocalizations zulipLocalizations) {
+    return zulipLocalizations.actionSheetOptionCopyMessageLink;
+  }
+
+  @override get onPressed => (BuildContext context) {
+    Navigator.of(context).pop();
+    final zulipLocalizations = ZulipLocalizations.of(messageListContext);
+
+    final store = PerAccountStoreWidget.of(messageListContext);
+    final messageLink = narrowLink(
+      store,
+      SendableNarrow.ofMessage(message, selfUserId: store.selfUserId),
+      nearMessageId: message.id,
+    );
+
+    copyWithPopup(context: messageListContext,
+      successContent: Text(zulipLocalizations.successLinkCopied),
+      data: ClipboardData(text: messageLink.toString()));
   };
 }

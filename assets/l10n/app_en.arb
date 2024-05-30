@@ -47,6 +47,10 @@
   "@actionSheetOptionCopyMessageText":  {
     "description": "Label for copy message text button on action sheet."
   },
+  "actionSheetOptionCopyMessageLink": "Copy message link",
+  "@actionSheetOptionCopyMessageLink": {
+    "description": "Label for copy message link button on action sheet."
+  },
   "actionSheetOptionShare": "Share",
   "@actionSheetOptionShare":  {
     "description": "Label for share button on action sheet."

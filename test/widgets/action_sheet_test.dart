@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 import 'package:zulip/api/model/model.dart';
 import 'package:zulip/api/route/messages.dart';
 import 'package:zulip/model/compose.dart';
+import 'package:zulip/model/internal_link.dart';
 import 'package:zulip/model/localizations.dart';
 import 'package:zulip/model/narrow.dart';
 import 'package:zulip/model/store.dart';
@@ -488,6 +489,34 @@ void main() {
         expectedMessage: 'That message does not seem to exist.',
       )));
       check(await Clipboard.getData('text/plain')).isNull();
+    });
+  });
+
+  group('CopyMessageLinkButton', () {
+    setUp(() async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        MockClipboard().handleMethodCall,
+      );
+    });
+
+    Future<void> tapCopyMessageLinkButton(WidgetTester tester) async {
+      await tester.ensureVisible(find.byIcon(Icons.link, skipOffstage: false));
+      await tester.tap(find.byIcon(Icons.link));
+      await tester.pump(); // [MenuItemButton.onPressed] called in a post-frame callback: flutter/flutter@e4a39fa2e
+    }
+
+    testWidgets('copies message link to clipboard', (tester) async {
+      final message = eg.streamMessage();
+      final narrow = TopicNarrow.ofMessage(message);
+      await setupToMessageActionSheet(tester, message: message, narrow: narrow);
+
+      final store = await testBinding.globalStore.perAccount(eg.selfAccount.id);
+      final expectedLink = narrowLink(store, narrow, nearMessageId: message.id).toString();
+
+      await tapCopyMessageLinkButton(tester);
+      await tester.pump(Duration.zero);
+      check(await Clipboard.getData('text/plain')).isNotNull().text.equals(expectedLink);
     });
   });
 }
