@@ -32,7 +32,7 @@ class ZulipLocalizationsUk extends ZulipLocalizations {
   String get upgradeWelcomeDialogLinkText => 'Ознайомтесь з анонсом у блозі!';
 
   @override
-  String get upgradeWelcomeDialogDismiss => 'Ходімо!';
+  String get upgradeWelcomeDialogDismiss => 'Ходімо';
 
   @override
   String get chooseAccountPageTitle => 'Обрати обліковий запис';
@@ -90,38 +90,41 @@ class ZulipLocalizationsUk extends ZulipLocalizations {
       'Щоб завантажувати файли, надайте Zulip додаткові дозволи в налаштуваннях.';
 
   @override
-  String get actionSheetOptionSubscribe => 'Subscribe';
+  String get actionSheetOptionSubscribe => 'Підписатися';
 
   @override
-  String get subscribeFailedTitle => 'Failed to subscribe';
+  String get subscribeFailedTitle => 'Не вдалося підписатися';
 
   @override
   String get actionSheetOptionMarkChannelAsRead =>
       'Позначити канал як прочитаний';
 
   @override
-  String get actionSheetOptionCopyChannelLink => 'Copy link to channel';
+  String get actionSheetOptionCopyChannelLink => 'Копіювати посилання на канал';
 
   @override
   String get actionSheetOptionListOfTopics => 'Список тем';
 
   @override
-  String get actionSheetOptionUnsubscribe => 'Unsubscribe';
+  String get actionSheetOptionChannelFeed => 'Стрічка каналу';
+
+  @override
+  String get actionSheetOptionUnsubscribe => 'Скасувати підписку';
 
   @override
   String unsubscribeConfirmationDialogTitle(String channelName) {
-    return 'Unsubscribe from $channelName?';
+    return 'Відписатися від $channelName?';
   }
 
   @override
   String get unsubscribeConfirmationDialogMessageMaybeCannotResubscribe =>
-      'Once you leave this channel, you might not be able to rejoin.';
+      'Після того, як ви залишите цей канал, ви, можливо, не зможете приєднатися знову.';
 
   @override
-  String get unsubscribeConfirmationDialogConfirmButton => 'Unsubscribe';
+  String get unsubscribeConfirmationDialogConfirmButton => 'Скасувати підписку';
 
   @override
-  String get unsubscribeFailedTitle => 'Failed to unsubscribe';
+  String get unsubscribeFailedTitle => 'Не вдалося скасувати підписку';
 
   @override
   String get actionSheetOptionMuteTopic => 'Заглушити тему';
@@ -150,14 +153,15 @@ class ZulipLocalizationsUk extends ZulipLocalizations {
       'Не вдалося позначити тему як невирішену';
 
   @override
-  String get actionSheetOptionSeeWhoReacted => 'See who reacted';
+  String get actionSheetOptionSeeWhoReacted => 'Дивіться, хто відреагував';
 
   @override
-  String get seeWhoReactedSheetNoReactions => 'This message has no reactions.';
+  String get seeWhoReactedSheetNoReactions =>
+      'На це повідомлення немає реакцій.';
 
   @override
   String seeWhoReactedSheetHeaderLabel(int num) {
-    return 'Emoji reactions ($num total)';
+    return 'Реакції емодзі (загалом $num)';
   }
 
   @override
@@ -165,16 +169,42 @@ class ZulipLocalizationsUk extends ZulipLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       num,
       locale: localeName,
-      other: '$num votes',
-      one: '1 vote',
+      other: '$num голоси',
+      one: '1 голосу',
     );
     return '$emojiName: $_temp0';
   }
 
   @override
   String seeWhoReactedSheetUserListLabel(String emojiName, int num) {
-    return 'Votes for $emojiName ($num)';
+    return 'Голоси за $emojiName ($num)';
   }
+
+  @override
+  String get actionSheetOptionViewReadReceipts =>
+      'Переглянути сповіщення про прочитання';
+
+  @override
+  String get actionSheetReadReceipts => 'Квитанції про прочитання';
+
+  @override
+  String actionSheetReadReceiptsReadCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Це повідомлення було <z-link>прочитано</z-link> $count людьми:',
+      one: 'Це повідомлення було <z-link>прочитано</z-link> $count особою:',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get actionSheetReadReceiptsZeroReadCount =>
+      'Ніхто ще не прочитав цього повідомлення.';
+
+  @override
+  String get actionSheetReadReceiptsErrorReadCount =>
+      'Не вдалося завантажити сповіщення про прочитання.';
 
   @override
   String get actionSheetOptionCopyMessageText => 'Копіювати текст повідомлення';
@@ -210,7 +240,7 @@ class ZulipLocalizationsUk extends ZulipLocalizations {
   String get actionSheetOptionMarkTopicAsRead => 'Позначити тему як прочитану';
 
   @override
-  String get actionSheetOptionCopyTopicLink => 'Copy link to topic';
+  String get actionSheetOptionCopyTopicLink => 'Копіювати посилання на тему';
 
   @override
   String get errorWebAuthOperationalErrorTitle => 'Щось пішло не так';
@@ -369,10 +399,10 @@ class ZulipLocalizationsUk extends ZulipLocalizations {
       'Посилання на повідомлення скопійовано';
 
   @override
-  String get successTopicLinkCopied => 'Topic link copied';
+  String get successTopicLinkCopied => 'Посилання на тему скопійовано';
 
   @override
-  String get successChannelLinkCopied => 'Channel link copied';
+  String get successChannelLinkCopied => 'Посилання на канал скопійовано';
 
   @override
   String get errorBannerDeactivatedDmLabel =>
@@ -509,10 +539,10 @@ class ZulipLocalizationsUk extends ZulipLocalizations {
   }
 
   @override
-  String get emptyMessageList => 'There are no messages here.';
+  String get emptyMessageList => 'Тут немає повідомлень.';
 
   @override
-  String get emptyMessageListSearch => 'No search results.';
+  String get emptyMessageListSearch => 'Немає результатів пошуку.';
 
   @override
   String get messageListGroupYouWithYourself => 'Повідомлення з собою';
@@ -611,6 +641,13 @@ class ZulipLocalizationsUk extends ZulipLocalizations {
   @override
   String get topicValidationErrorMandatoryButEmpty =>
       'Теми обовʼязкові в цій організації.';
+
+  @override
+  String get errorContentNotInsertedTitle => 'Вміст не вставлено';
+
+  @override
+  String get errorContentToInsertIsEmpty =>
+      'Файл, який потрібно вставити, порожній або до нього немає доступу.';
 
   @override
   String errorServerVersionUnsupportedMessage(
@@ -713,15 +750,65 @@ class ZulipLocalizationsUk extends ZulipLocalizations {
   String get yesterday => 'Учора';
 
   @override
-  String get invisibleMode => 'Invisible mode';
+  String get userActiveNow => 'Активний зараз';
+
+  @override
+  String get userIdle => 'Холостий хід';
+
+  @override
+  String userActiveMinutesAgo(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: '$minutes хвилин',
+      one: '1 хвилина',
+    );
+    return 'Активний $_temp0 тому';
+  }
+
+  @override
+  String userActiveHoursAgo(int hours) {
+    String _temp0 = intl.Intl.pluralLogic(
+      hours,
+      locale: localeName,
+      other: '$hours години',
+      one: '1 година',
+    );
+    return 'Активний $_temp0 тому';
+  }
+
+  @override
+  String get userActiveYesterday => 'Активний учора';
+
+  @override
+  String userActiveDaysAgo(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days дні',
+      one: '1 день',
+    );
+    return 'Активний $_temp0 тому';
+  }
+
+  @override
+  String userActiveDate(String date) {
+    return 'Активний $date';
+  }
+
+  @override
+  String get userNotActiveInYear => 'Неактивний протягом останнього року';
+
+  @override
+  String get invisibleMode => 'Невидимий режим';
 
   @override
   String get turnOnInvisibleModeErrorTitle =>
-      'Error turning on invisible mode. Please try again.';
+      'Помилка ввімкнення режиму невидимості. Спробуйте ще раз.';
 
   @override
   String get turnOffInvisibleModeErrorTitle =>
-      'Error turning off invisible mode. Please try again.';
+      'Помилка вимкнення режиму невидимості. Спробуйте ще раз.';
 
   @override
   String get userRoleOwner => 'Власник';
@@ -742,59 +829,59 @@ class ZulipLocalizationsUk extends ZulipLocalizations {
   String get userRoleUnknown => 'Невідомо';
 
   @override
-  String get statusButtonLabelStatusSet => 'Status';
+  String get statusButtonLabelStatusSet => 'Статус';
 
   @override
-  String get statusButtonLabelStatusUnset => 'Set status';
+  String get statusButtonLabelStatusUnset => 'Встановити статус';
 
   @override
-  String get noStatusText => 'No status text';
+  String get noStatusText => 'Немає тексту статусу';
 
   @override
-  String get setStatusPageTitle => 'Set status';
+  String get setStatusPageTitle => 'Встановити статус';
 
   @override
-  String get statusClearButtonLabel => 'Clear';
+  String get statusClearButtonLabel => 'Очистити';
 
   @override
-  String get statusSaveButtonLabel => 'Save';
+  String get statusSaveButtonLabel => 'Зберегти';
 
   @override
-  String get statusTextHint => 'Your status';
+  String get statusTextHint => 'Ваш статус';
 
   @override
-  String get userStatusBusy => 'Busy';
+  String get userStatusBusy => 'Зайнятий';
 
   @override
-  String get userStatusInAMeeting => 'In a meeting';
+  String get userStatusInAMeeting => 'На зустрічі';
 
   @override
-  String get userStatusCommuting => 'Commuting';
+  String get userStatusCommuting => 'Поїздки на роботу';
 
   @override
-  String get userStatusOutSick => 'Out sick';
+  String get userStatusOutSick => 'Хворий';
 
   @override
-  String get userStatusVacationing => 'Vacationing';
+  String get userStatusVacationing => 'Відпустка';
 
   @override
-  String get userStatusWorkingRemotely => 'Working remotely';
+  String get userStatusWorkingRemotely => 'Працюємо віддалено';
 
   @override
-  String get userStatusAtTheOffice => 'At the office';
+  String get userStatusAtTheOffice => 'В офісі';
 
   @override
   String get updateStatusErrorTitle =>
-      'Error updating user status. Please try again.';
+      'Помилка оновлення статусу користувача. Спробуйте ще раз.';
 
   @override
-  String get searchMessagesPageTitle => 'Search';
+  String get searchMessagesPageTitle => 'Пошук';
 
   @override
-  String get searchMessagesHintText => 'Search';
+  String get searchMessagesHintText => 'Пошук';
 
   @override
-  String get searchMessagesClearButtonTooltip => 'Clear';
+  String get searchMessagesClearButtonTooltip => 'Очистити';
 
   @override
   String get inboxPageTitle => 'Вхідні';
@@ -829,6 +916,9 @@ class ZulipLocalizationsUk extends ZulipLocalizations {
   String get channelsEmptyPlaceholder => 'Ви ще не підписані на жодний канал.';
 
   @override
+  String get sharePageTitle => 'Поділитися';
+
+  @override
   String get mainMenuMyProfile => 'Мій профіль';
 
   @override
@@ -861,7 +951,7 @@ class ZulipLocalizationsUk extends ZulipLocalizations {
   String get reactedEmojiSelfUser => 'Ви';
 
   @override
-  String get reactionChipsLabel => 'Reactions';
+  String get reactionChipsLabel => 'Реакції';
 
   @override
   String reactionChipLabel(String emojiName, String votes) {
@@ -873,8 +963,8 @@ class ZulipLocalizationsUk extends ZulipLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       otherUsersCount,
       locale: localeName,
-      other: 'You and $otherUsersCount others',
-      one: 'You and 1 other',
+      other: 'Ви і $otherUsersCount інші',
+      one: 'Ви та ще 1 особа',
     );
     return '$_temp0';
   }
@@ -1017,6 +1107,13 @@ class ZulipLocalizationsUk extends ZulipLocalizations {
   String get errorReactionRemovingFailedTitle => 'Не вдалося видалити реакцію';
 
   @override
+  String get errorSharingTitle => 'Не вдалося поділитися контентом';
+
+  @override
+  String get errorSharingAccountNotLoggedIn =>
+      'Немає облікового запису, в який ви ввійшли. Будь ласка, увійдіть в обліковий запис і спробуйте ще раз..';
+
+  @override
   String get emojiReactionsMore => 'більше';
 
   @override
@@ -1026,8 +1123,7 @@ class ZulipLocalizationsUk extends ZulipLocalizations {
   String get noEarlierMessages => 'Немає попередніх повідомлень';
 
   @override
-  String get revealButtonLabel =>
-      'Показати повідомлення заглушеного відправника';
+  String get revealButtonLabel => 'Показати повідомлення';
 
   @override
   String get mutedUser => 'Заглушений користувач';

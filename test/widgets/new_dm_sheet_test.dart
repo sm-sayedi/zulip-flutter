@@ -25,6 +25,7 @@ import 'test_app.dart';
 late PerAccountStore store;
 
 Future<void> setupSheet(WidgetTester tester, {
+  User? selfUser,
   required List<User> users,
   List<int>? mutedUserIds,
 }) async {
@@ -34,16 +35,18 @@ Future<void> setupSheet(WidgetTester tester, {
   final testNavObserver = TestNavigatorObserver()
     ..onPushed = (route, _) => lastPushedRoute = route;
 
-  await testBinding.globalStore.add(eg.selfAccount, eg.initialSnapshot());
-  store = await testBinding.globalStore.perAccount(eg.selfAccount.id);
-  await store.addUsers(users);
+  selfUser ??= eg.selfUser;
+  final account = eg.account(user: selfUser);
+  await testBinding.globalStore.add(account, eg.initialSnapshot(
+    realmUsers: [selfUser, ...users]));
+  store = await testBinding.globalStore.perAccount(account.id);
   if (mutedUserIds != null) {
     await store.setMutedUsers(mutedUserIds);
   }
 
   await tester.pumpWidget(TestZulipApp(
     navigatorObservers: [testNavObserver],
-    accountId: eg.selfAccount.id,
+    accountId: account.id,
     child: const HomePage()));
   await tester.pumpAndSettle();
 
@@ -120,14 +123,15 @@ void main() {
       eg.user(fullName: 'Alice Anderson'),
       eg.user(fullName: 'Bob Brown'),
       eg.user(fullName: 'Charlie Carter'),
+      eg.user(fullName: 'Édith Piaf'),
     ];
 
     testWidgets('shows full list initially', (tester) async {
-      await setupSheet(tester, users: testUsers);
+      await setupSheet(tester, selfUser: testUsers[0], users: testUsers);
       check(findText(includePlaceholders: false, 'Alice Anderson')).findsOne();
       check(findText(includePlaceholders: false, 'Bob Brown')).findsOne();
       check(findText(includePlaceholders: false, 'Charlie Carter')).findsOne();
-      check(find.byIcon(ZulipIcons.check_circle_unchecked)).findsExactly(3);
+      check(find.byIcon(ZulipIcons.check_circle_unchecked)).findsExactly(testUsers.length);
       check(find.byIcon(ZulipIcons.check_circle_checked)).findsNothing();
     });
 
@@ -143,10 +147,11 @@ void main() {
     testWidgets('deactivated users excluded', (tester) async {
       // Omit a deactivated user both before there's a query…
       final deactivatedUser = eg.user(fullName: 'Impostor Charlie', isActive: false);
-      await setupSheet(tester, users: [...testUsers, deactivatedUser]);
+      await setupSheet(tester, selfUser: testUsers[0],
+        users: [...testUsers, deactivatedUser]);
       check(findText(includePlaceholders: false, 'Impostor Charlie')).findsNothing();
       check(findText(includePlaceholders: false, 'Charlie Carter')).findsOne();
-      check(find.byIcon(ZulipIcons.check_circle_unchecked)).findsExactly(3);
+      check(find.byIcon(ZulipIcons.check_circle_unchecked)).findsExactly(testUsers.length);
 
       // … and after a query that would match their name.
       await tester.enterText(find.byType(TextField), 'Charlie');
@@ -159,12 +164,12 @@ void main() {
     testWidgets('muted users excluded', (tester) async {
       // Omit muted users both before there's a query…
       final mutedUser = eg.user(fullName: 'Someone Muted');
-      await setupSheet(tester,
+      await setupSheet(tester, selfUser: testUsers[0],
         users: [...testUsers, mutedUser], mutedUserIds: [mutedUser.userId]);
       check(findText(includePlaceholders: false, 'Someone Muted')).findsNothing();
       check(findText(includePlaceholders: false, 'Muted user')).findsNothing();
       check(findText(includePlaceholders: false, 'Alice Anderson')).findsOne();
-      check(find.byIcon(ZulipIcons.check_circle_unchecked)).findsExactly(3);
+      check(find.byIcon(ZulipIcons.check_circle_unchecked)).findsExactly(testUsers.length);
 
       // … and after a query.  One which matches both the user's actual name and
       // the replacement text "Muted user", for good measure.
@@ -174,13 +179,14 @@ void main() {
       check(findText(includePlaceholders: false, 'Muted user')).findsNothing();
       check(findText(includePlaceholders: false, 'Alice Anderson')).findsOne();
       check(findText(includePlaceholders: false, 'Charlie Carter')).findsOne();
-      check(find.byIcon(ZulipIcons.check_circle_unchecked)).findsExactly(2);
+      check(findText(includePlaceholders: false, 'Édith Piaf')).findsOne();
+      check(find.byIcon(ZulipIcons.check_circle_unchecked)).findsExactly(3);
     });
 
     // TODO test sorting by recent-DMs
     // TODO test that scroll position resets on query change
 
-    testWidgets('search is case-insensitive', (tester) async {
+    testWidgets('search is case- and diacritics-insensitive', (tester) async {
       await setupSheet(tester, users: testUsers);
       await tester.enterText(find.byType(TextField), 'alice');
       await tester.pump();
@@ -189,6 +195,14 @@ void main() {
       await tester.enterText(find.byType(TextField), 'ALICE');
       await tester.pump();
       check(findText(includePlaceholders: false, 'Alice Anderson')).findsOne();
+
+      await tester.enterText(find.byType(TextField), 'alicé');
+      await tester.pump();
+      check(findText(includePlaceholders: false, 'Alice Anderson')).findsOne();
+
+      await tester.enterText(find.byType(TextField), 'edith');
+      await tester.pump();
+      check(findText(includePlaceholders: false, 'Édith Piaf')).findsOne();
     });
 
     testWidgets('partial name and last name search handling', (tester) async {
@@ -254,7 +268,7 @@ void main() {
     }
 
     testWidgets('tapping user chip deselects the user', (tester) async {
-      await setupSheet(tester, users: [eg.selfUser, eg.otherUser, eg.thirdUser]);
+      await setupSheet(tester, users: [eg.otherUser, eg.thirdUser]);
 
       await tester.tap(findUserTile(eg.otherUser));
       await tester.pump();
@@ -266,7 +280,7 @@ void main() {
 
     testWidgets('selecting and deselecting a user', (tester) async {
       final user = eg.user(fullName: 'Test User');
-      await setupSheet(tester, users: [eg.selfUser, user]);
+      await setupSheet(tester, users: [user]);
 
       checkUserSelected(tester, user, false);
       checkUserSelected(tester, eg.selfUser, false);
@@ -285,7 +299,7 @@ void main() {
 
     testWidgets('other user selection deselects self user', (tester) async {
       final otherUser = eg.user(fullName: 'Other User');
-      await setupSheet(tester, users: [eg.selfUser, otherUser]);
+      await setupSheet(tester, users: [otherUser]);
 
       await tester.tap(findUserTile(eg.selfUser));
       await tester.pump();
@@ -300,7 +314,7 @@ void main() {
 
     testWidgets('other user selection hides self user', (tester) async {
       final otherUser = eg.user(fullName: 'Other User');
-      await setupSheet(tester, users: [eg.selfUser, otherUser]);
+      await setupSheet(tester, users: [otherUser]);
 
       check(findText(includePlaceholders: false, eg.selfUser.fullName)).findsOne();
 

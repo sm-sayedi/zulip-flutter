@@ -15,7 +15,7 @@ InitialSnapshot _$InitialSnapshotFromJson(
   lastEventId: (json['last_event_id'] as num).toInt(),
   zulipFeatureLevel: (json['zulip_feature_level'] as num).toInt(),
   zulipVersion: json['zulip_version'] as String,
-  zulipMergeBase: json['zulip_merge_base'] as String?,
+  zulipMergeBase: json['zulip_merge_base'] as String,
   alertWords: (json['alert_words'] as List<dynamic>)
       .map((e) => e as String)
       .toList(),
@@ -91,6 +91,7 @@ InitialSnapshot _$InitialSnapshotFromJson(
   realmAllowMessageEditing: json['realm_allow_message_editing'] as bool,
   realmMessageContentEditLimitSeconds:
       (json['realm_message_content_edit_limit_seconds'] as num?)?.toInt(),
+  realmEnableReadReceipts: json['realm_enable_read_receipts'] as bool,
   realmPresenceDisabled: json['realm_presence_disabled'] as bool,
   realmDefaultExternalAccounts:
       (json['realm_default_external_accounts'] as Map<String, dynamic>).map(
@@ -162,6 +163,7 @@ Map<String, dynamic> _$InitialSnapshotToJson(
   'realm_allow_message_editing': instance.realmAllowMessageEditing,
   'realm_message_content_edit_limit_seconds':
       instance.realmMessageContentEditLimitSeconds,
+  'realm_enable_read_receipts': instance.realmEnableReadReceipts,
   'realm_presence_disabled': instance.realmPresenceDisabled,
   'realm_default_external_accounts': instance.realmDefaultExternalAccounts,
   'max_file_upload_size_mib': instance.maxFileUploadSizeMib,
@@ -308,9 +310,7 @@ Map<String, dynamic> _$UnreadMessagesSnapshotToJson(
 
 UnreadDmSnapshot _$UnreadDmSnapshotFromJson(Map<String, dynamic> json) =>
     UnreadDmSnapshot(
-      otherUserId:
-          (UnreadDmSnapshot._readOtherUserId(json, 'other_user_id') as num)
-              .toInt(),
+      otherUserId: (json['other_user_id'] as num).toInt(),
       unreadMessageIds: (json['unread_message_ids'] as List<dynamic>)
           .map((e) => (e as num).toInt())
           .toList(),
@@ -355,3 +355,38 @@ Map<String, dynamic> _$UnreadHuddleSnapshotToJson(
   'user_ids_string': instance.userIdsString,
   'unread_message_ids': instance.unreadMessageIds,
 };
+
+SupportedPermissionSettings _$SupportedPermissionSettingsFromJson(
+  Map<String, dynamic> json,
+) => SupportedPermissionSettings(
+  realm: (json['realm'] as Map<String, dynamic>).map(
+    (k, e) =>
+        MapEntry(k, PermissionSettingsItem.fromJson(e as Map<String, dynamic>)),
+  ),
+  stream: (json['stream'] as Map<String, dynamic>).map(
+    (k, e) =>
+        MapEntry(k, PermissionSettingsItem.fromJson(e as Map<String, dynamic>)),
+  ),
+  group: (json['group'] as Map<String, dynamic>).map(
+    (k, e) =>
+        MapEntry(k, PermissionSettingsItem.fromJson(e as Map<String, dynamic>)),
+  ),
+);
+
+Map<String, dynamic> _$SupportedPermissionSettingsToJson(
+  SupportedPermissionSettings instance,
+) => <String, dynamic>{
+  'realm': instance.realm,
+  'stream': instance.stream,
+  'group': instance.group,
+};
+
+PermissionSettingsItem _$PermissionSettingsItemFromJson(
+  Map<String, dynamic> json,
+) => PermissionSettingsItem(
+  allowEveryoneGroup: json['allow_everyone_group'] as bool,
+);
+
+Map<String, dynamic> _$PermissionSettingsItemToJson(
+  PermissionSettingsItem instance,
+) => <String, dynamic>{'allow_everyone_group': instance.allowEveryoneGroup};

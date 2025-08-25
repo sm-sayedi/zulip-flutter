@@ -305,6 +305,12 @@ abstract class ZulipLocalizations {
   /// **'List of topics'**
   String get actionSheetOptionListOfTopics;
 
+  /// Label for navigating to a channel's channel-feed page.
+  ///
+  /// In en, this message translates to:
+  /// **'Channel feed'**
+  String get actionSheetOptionChannelFeed;
+
   /// Label in the channel action sheet for unsubscribing from the channel.
   ///
   /// In en, this message translates to:
@@ -412,6 +418,36 @@ abstract class ZulipLocalizations {
   /// In en, this message translates to:
   /// **'Votes for {emojiName} ({num})'**
   String seeWhoReactedSheetUserListLabel(String emojiName, int num);
+
+  /// Label for the 'View read receipts' button in the message action sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'View read receipts'**
+  String get actionSheetOptionViewReadReceipts;
+
+  /// Title for the "Read receipts" bottom sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Read receipts'**
+  String get actionSheetReadReceipts;
+
+  /// Label in the "Read receipts" bottom sheet when one or more people have read the message.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{This message has been <z-link>read</z-link> by {count} person:} other{This message has been <z-link>read</z-link> by {count} people:}}'**
+  String actionSheetReadReceiptsReadCount(int count);
+
+  /// Label in the "Read receipts" bottom sheet when no one has read the message.
+  ///
+  /// In en, this message translates to:
+  /// **'No one has read this message yet.'**
+  String get actionSheetReadReceiptsZeroReadCount;
+
+  /// Label in the "Read receipts" bottom sheet when loading read receipts failed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to load read receipts.'**
+  String get actionSheetReadReceiptsErrorReadCount;
 
   /// Label for copy message text button on action sheet.
   ///
@@ -1135,6 +1171,18 @@ abstract class ZulipLocalizations {
   /// **'Topics are required in this organization.'**
   String get topicValidationErrorMandatoryButEmpty;
 
+  /// Title for error dialog when an attempt to insert rich content failed.
+  ///
+  /// In en, this message translates to:
+  /// **'Content not inserted'**
+  String get errorContentNotInsertedTitle;
+
+  /// Error message when the rich content to be inserted is empty or cannot be accessed.
+  ///
+  /// In en, this message translates to:
+  /// **'The file to be inserted is empty or cannot be accessed.'**
+  String get errorContentToInsertIsEmpty;
+
   /// Error message in the dialog for when the Zulip Server version is unsupported.
   ///
   /// In en, this message translates to:
@@ -1270,6 +1318,56 @@ abstract class ZulipLocalizations {
   /// In en, this message translates to:
   /// **'Yesterday'**
   String get yesterday;
+
+  /// Indicates a user is currently active on Zulip (not idle or offline)
+  ///
+  /// In en, this message translates to:
+  /// **'Active now'**
+  String get userActiveNow;
+
+  /// Indicates a user is currently idle on Zulip (not active, but not offline)
+  ///
+  /// In en, this message translates to:
+  /// **'Idle'**
+  String get userIdle;
+
+  /// Indicates when a user was last active on Zulip (who is currently offline)
+  ///
+  /// In en, this message translates to:
+  /// **'Active {minutes, plural, =1{1 minute} other{{minutes} minutes}} ago'**
+  String userActiveMinutesAgo(int minutes);
+
+  /// Indicates when a user was last active on Zulip (who is currently offline)
+  ///
+  /// In en, this message translates to:
+  /// **'Active {hours, plural, =1{1 hour} other{{hours} hours}} ago'**
+  String userActiveHoursAgo(int hours);
+
+  /// Indicates when a user was last active on Zulip (who is currently offline)
+  ///
+  /// In en, this message translates to:
+  /// **'Active yesterday'**
+  String get userActiveYesterday;
+
+  /// Indicates when a user was last active on Zulip (who is currently offline)
+  ///
+  /// In en, this message translates to:
+  /// **'Active {days, plural, =1{1 day} other{{days} days}} ago'**
+  String userActiveDaysAgo(int days);
+
+  /// Indicates the date when a user was last active on Zulip (who is currently offline).
+  ///
+  /// The date might be day and month if recent, or day, month, and year if less recent.
+  ///
+  /// In en, this message translates to:
+  /// **'Active {date}'**
+  String userActiveDate(String date);
+
+  /// Indicates when a user was last active on Zulip (who is currently offline)
+  ///
+  /// In en, this message translates to:
+  /// **'Not active in the last year'**
+  String get userNotActiveInYear;
 
   /// Label for the 'Invisible mode' switch on the profile page.
   ///
@@ -1492,6 +1590,12 @@ abstract class ZulipLocalizations {
   /// In en, this message translates to:
   /// **'You are not subscribed to any channels yet.'**
   String get channelsEmptyPlaceholder;
+
+  /// Title for the page about sharing content received from other apps.
+  ///
+  /// In en, this message translates to:
+  /// **'Share'**
+  String get sharePageTitle;
 
   /// Label for main-menu button leading to the user's own profile.
   ///
@@ -1798,6 +1902,18 @@ abstract class ZulipLocalizations {
   /// In en, this message translates to:
   /// **'Removing reaction failed'**
   String get errorReactionRemovingFailedTitle;
+
+  /// Error title when sharing content received from other apps fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to share content'**
+  String get errorSharingTitle;
+
+  /// Error title when sharing content received from other apps fails, when there is no account logged in
+  ///
+  /// In en, this message translates to:
+  /// **'There is no account logged in. Please log in to an account and try again.'**
+  String get errorSharingAccountNotLoggedIn;
 
   /// Label for a button opening the emoji picker.
   ///

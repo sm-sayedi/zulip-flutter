@@ -34,7 +34,10 @@ sealed class Event {
         switch (json['op'] as String) {
           case 'add': return UserGroupAddEvent.fromJson(json);
           case 'update': return UserGroupUpdateEvent.fromJson(json);
-          // TODO(#1687): add_members, remove_members, add_subgroups, remove_subgroups
+          case 'add_members': return UserGroupAddMembersEvent.fromJson(json);
+          case 'remove_members': return UserGroupRemoveMembersEvent.fromJson(json);
+          case 'add_subgroups': return UserGroupAddSubgroupsEvent.fromJson(json);
+          case 'remove_subgroups': return UserGroupRemoveSubgroupsEvent.fromJson(json);
           case 'remove': return UserGroupRemoveEvent.fromJson(json);
           default: return UnexpectedEvent.fromJson(json);
         }
@@ -280,6 +283,78 @@ class UserGroupUpdateData {
   Map<String, dynamic> toJson() => _$UserGroupUpdateDataToJson(this);
 }
 
+/// A [UserGroupEvent] with op `add_members`: https://zulip.com/api/get-events#user_group-add_members
+@JsonSerializable(fieldRename: FieldRename.snake)
+class UserGroupAddMembersEvent extends UserGroupEvent {
+  @override
+  @JsonKey(includeToJson: true)
+  String get op => 'add_members';
+
+  final int groupId;
+  final List<int> userIds;
+
+  UserGroupAddMembersEvent({required super.id, required this.groupId, required this.userIds});
+
+  factory UserGroupAddMembersEvent.fromJson(Map<String, dynamic> json) => _$UserGroupAddMembersEventFromJson(json);
+
+  @override
+  Map<String, dynamic> toJson() => _$UserGroupAddMembersEventToJson(this);
+}
+
+/// A [UserGroupEvent] with op `remove_members`: https://zulip.com/api/get-events#user_group-remove_members
+@JsonSerializable(fieldRename: FieldRename.snake)
+class UserGroupRemoveMembersEvent extends UserGroupEvent {
+  @override
+  @JsonKey(includeToJson: true)
+  String get op => 'remove_members';
+
+  final int groupId;
+  final List<int> userIds;
+
+  UserGroupRemoveMembersEvent({required super.id, required this.groupId, required this.userIds});
+
+  factory UserGroupRemoveMembersEvent.fromJson(Map<String, dynamic> json) => _$UserGroupRemoveMembersEventFromJson(json);
+
+  @override
+  Map<String, dynamic> toJson() => _$UserGroupRemoveMembersEventToJson(this);
+}
+
+/// A [UserGroupEvent] with op `add_subgroups`: https://zulip.com/api/get-events#user_group-add_subgroups
+@JsonSerializable(fieldRename: FieldRename.snake)
+class UserGroupAddSubgroupsEvent extends UserGroupEvent {
+  @override
+  @JsonKey(includeToJson: true)
+  String get op => 'add_subgroups';
+
+  final int groupId;
+  final List<int> directSubgroupIds;
+
+  UserGroupAddSubgroupsEvent({required super.id, required this.groupId, required this.directSubgroupIds});
+
+  factory UserGroupAddSubgroupsEvent.fromJson(Map<String, dynamic> json) => _$UserGroupAddSubgroupsEventFromJson(json);
+
+  @override
+  Map<String, dynamic> toJson() => _$UserGroupAddSubgroupsEventToJson(this);
+}
+
+/// A [UserGroupEvent] with op `remove_subgroups`: https://zulip.com/api/get-events#user_group-remove_subgroups
+@JsonSerializable(fieldRename: FieldRename.snake)
+class UserGroupRemoveSubgroupsEvent extends UserGroupEvent {
+  @override
+  @JsonKey(includeToJson: true)
+  String get op => 'remove_subgroups';
+
+  final int groupId;
+  final List<int> directSubgroupIds;
+
+  UserGroupRemoveSubgroupsEvent({required super.id, required this.groupId, required this.directSubgroupIds});
+
+  factory UserGroupRemoveSubgroupsEvent.fromJson(Map<String, dynamic> json) => _$UserGroupRemoveSubgroupsEventFromJson(json);
+
+  @override
+  Map<String, dynamic> toJson() => _$UserGroupRemoveSubgroupsEventToJson(this);
+}
+
 /// A [UserGroupEvent] with op `remove`: https://zulip.com/api/get-events#user_group-remove
 @JsonSerializable(fieldRename: FieldRename.snake)
 class UserGroupRemoveEvent extends UserGroupEvent {
@@ -383,7 +458,6 @@ class RealmUserUpdateEvent extends RealmUserEvent {
   @JsonKey(readValue: _readFromPerson) final String? timezone;
   @JsonKey(readValue: _readFromPerson) final int? botOwnerId;
   @JsonKey(readValue: _readFromPerson, unknownEnumValue: UserRole.unknown) final UserRole? role;
-  @JsonKey(readValue: _readFromPerson) final bool? isBillingAdmin;
 
   @JsonKey(readValue: _readNullableStringFromPerson)
   @NullableStringJsonConverter()
@@ -421,7 +495,6 @@ class RealmUserUpdateEvent extends RealmUserEvent {
     this.timezone,
     this.botOwnerId,
     this.role,
-    this.isBillingAdmin,
     this.deliveryEmail,
     this.customProfileField,
     this.newEmail,
@@ -601,6 +674,9 @@ class ChannelUpdateEvent extends ChannelEvent {
         return value as int?;
       case ChannelPropertyName.channelPostPolicy:
         return ChannelPostPolicy.fromApiValue(value as int);
+      case ChannelPropertyName.canAddSubscribersGroup:
+      case ChannelPropertyName.canSubscribeGroup:
+        return GroupSettingValue.fromJson(value);
       case ChannelPropertyName.streamWeeklyTraffic:
         return value as int?;
       case null:
@@ -928,13 +1004,13 @@ class UpdateMessageEvent extends Event {
   @JsonKey(includeToJson: true)
   String get type => 'update_message';
 
-  final int? userId; // TODO(server-5)
-  final bool? renderingOnly; // TODO(server-5)
+  final int? userId;
+  final bool renderingOnly;
   final int messageId;
   final List<int> messageIds;
 
   final List<MessageFlag> flags;
-  final int? editTimestamp; // TODO(server-5)
+  final int editTimestamp;
 
   // final String? streamName; // ignore
 

@@ -53,15 +53,20 @@ mixin MessageStore {
   /// and the update-message event hasn't arrived.
   bool? getEditMessageErrorStatus(int messageId);
 
-  /// Edit a message's content, via a request to the server.
+  /// Makes an edit-message request and starts an edit-outbox lifecycle.
   ///
   /// Should only be called when there is no current edit request for [messageId],
   /// i.e., [getEditMessageErrorStatus] returns null for [messageId].
   ///
+  /// The returned [Future] settles when the edit-message response is received.
+  /// The [Future] resolves if the request succeeded and rejects if it failed,
+  /// unless the event already arrived or the message was deleted,
+  /// in which case it resolves.
+  ///
   /// See also:
   ///   * [getEditMessageErrorStatus]
   ///   * [takeFailedMessageEdit]
-  void editMessage({
+  Future<void> editMessage({
     required int messageId,
     required String originalRawContent,
     required String newContent,
@@ -104,7 +109,7 @@ mixin ProxyMessageStore on MessageStore {
     return messageStore.getEditMessageErrorStatus(messageId);
   }
   @override
-  void editMessage({
+  Future<void> editMessage({
     required int messageId,
     required String originalRawContent,
     required String newContent,
@@ -315,7 +320,7 @@ class MessageStoreImpl extends HasRealmStore with MessageStore, _OutboxMessageSt
   final Map<int, _EditMessageRequestStatus> _editMessageRequests = {};
 
   @override
-  void editMessage({
+  Future<void> editMessage({
     required int messageId,
     required String originalRawContent,
     required String newContent,
@@ -349,6 +354,7 @@ class MessageStoreImpl extends HasRealmStore with MessageStore, _OutboxMessageSt
       }
       status.hasError = true;
       _notifyMessageListViewsForOneMessage(messageId);
+      rethrow;
     }
   }
 
@@ -403,9 +409,7 @@ class MessageStoreImpl extends HasRealmStore with MessageStore, _OutboxMessageSt
   }
 
   void _handleUpdateMessageEventTimestamp(UpdateMessageEvent event) {
-    // TODO(server-5): Cut this fallback; rely on renderingOnly from FL 114
-    final isRenderingOnly = event.renderingOnly ?? (event.userId == null);
-    if (event.editTimestamp == null || isRenderingOnly) {
+    if (event.renderingOnly) {
       // A rendering-only update gets omitted from the message edit history,
       // and [Message.lastEditTimestamp] is the last timestamp of that history.
       // So on a rendering-only update, the timestamp doesn't get updated.

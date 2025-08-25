@@ -12,6 +12,50 @@ export 'reaction.dart';
 
 part 'model.g.dart';
 
+/// A Zulip "group-setting value": https://zulip.com/api/group-setting-values
+sealed class GroupSettingValue {
+  const GroupSettingValue();
+
+  factory GroupSettingValue.fromJson(Object? json) {
+    return switch (json) {
+      int() => GroupSettingValueNamed.fromJson(json),
+      Map<String, dynamic>() => GroupSettingValueNameless.fromJson(json),
+      _ => throw FormatException(),
+    };
+  }
+
+  Object? toJson();
+}
+
+class GroupSettingValueNamed extends GroupSettingValue {
+  final int groupId;
+
+  const GroupSettingValueNamed(this.groupId);
+
+  factory GroupSettingValueNamed.fromJson(int json) => GroupSettingValueNamed(json);
+
+  @override
+  int toJson() => groupId;
+}
+
+@JsonSerializable(fieldRename: FieldRename.snake)
+class GroupSettingValueNameless extends GroupSettingValue {
+  // TODO(server): The API docs say these should be "direct_member_ids" and
+  //   "direct_subgroup_ids", but empirically they're "direct_members"
+  //   and "direct_subgroups".  Discussion:
+  //     https://chat.zulip.org/#narrow/channel/378-api-design/topic/groups.20redesign/near/2247218
+  final List<int> directMembers;
+  final List<int> directSubgroups;
+
+  GroupSettingValueNameless({required this.directMembers, required this.directSubgroups});
+
+  factory GroupSettingValueNameless.fromJson(Map<String, dynamic> json) =>
+    _$GroupSettingValueNamelessFromJson(json);
+
+  @override
+  Map<String, dynamic> toJson() => _$GroupSettingValueNamelessToJson(this);
+}
+
 /// As in [InitialSnapshot.customProfileFields].
 ///
 /// For docs, search for "custom_profile_fields:"
@@ -357,9 +401,8 @@ enum Emojiset {
 class UserGroup {
   final int id;
 
-  // TODO(#1687) to maintain members, also act on user deactivation: https://github.com/zulip/zulip-flutter/issues/662#issuecomment-2405845356
-  // List<int> members; // TODO(#1687) track group members
-  // List<int> directSubgroupIds; // TODO(#1687) track group members
+  final Set<int> members;
+  final Set<int> directSubgroupIds;
 
   String name;
   String description;
@@ -377,6 +420,8 @@ class UserGroup {
 
   UserGroup({
     required this.id,
+    required this.members,
+    required this.directSubgroupIds,
     required this.name,
     required this.description,
     required this.isSystemGroup,
@@ -414,7 +459,6 @@ class User {
   // bool isOwner; // obsoleted by [role]; ignore
   // bool isAdmin; // obsoleted by [role]; ignore
   // bool isGuest; // obsoleted by [role]; ignore
-  bool? isBillingAdmin; // TODO(server-5)
   final bool isBot;
   final int? botType; // TODO enum
   int? botOwnerId;
@@ -430,7 +474,9 @@ class User {
   @JsonKey(readValue: _readProfileData)
   Map<int, ProfileFieldUserData>? profileData;
 
-  @JsonKey(readValue: _readIsSystemBot)
+  // This field is absent in `realm_users` and `realm_non_active_users`,
+  // which contain no system bots; it's present in `cross_realm_bots`.
+  @JsonKey(defaultValue: false)
   final bool isSystemBot;
 
   static Map<String, dynamic>? _readProfileData(Map<dynamic, dynamic> json, String key) {
@@ -442,14 +488,6 @@ class User {
     return (value != null && value.isNotEmpty) ? value : null;
   }
 
-  static bool _readIsSystemBot(Map<dynamic, dynamic> json, String key) {
-    // This field is absent in `realm_users` and `realm_non_active_users`,
-    // which contain no system bots; it's present in `cross_realm_bots`.
-    return (json[key] as bool?)
-        ?? (json['is_cross_realm_bot'] as bool?) // TODO(server-5): renamed to `is_system_bot`
-        ?? false;
-  }
-
   User({
     required this.userId,
     required this.deliveryEmail,
@@ -457,7 +495,6 @@ class User {
     required this.fullName,
     required this.dateJoined,
     required this.isActive,
-    required this.isBillingAdmin,
     required this.isBot,
     required this.botType,
     required this.botOwnerId,
@@ -604,7 +641,8 @@ class ZulipStream {
   ChannelPostPolicy channelPostPolicy;
   // final bool isAnnouncementOnly; // deprecated for `channelPostPolicy`; ignore
 
-  // GroupSettingsValue canRemoveSubscribersGroup; // TODO(#814)
+  GroupSettingValue? canAddSubscribersGroup; // TODO(server-10)
+  GroupSettingValue? canSubscribeGroup; // TODO(server-10)
 
   // TODO(server-8): added in FL 199, was previously only on [Subscription] objects
   int? streamWeeklyTraffic;
@@ -621,6 +659,8 @@ class ZulipStream {
     required this.historyPublicToSubscribers,
     required this.messageRetentionDays,
     required this.channelPostPolicy,
+    required this.canAddSubscribersGroup,
+    required this.canSubscribeGroup,
     required this.streamWeeklyTraffic,
   });
 
@@ -638,6 +678,8 @@ class ZulipStream {
       historyPublicToSubscribers: subscription.historyPublicToSubscribers,
       messageRetentionDays: subscription.messageRetentionDays,
       channelPostPolicy: subscription.channelPostPolicy,
+      canAddSubscribersGroup: subscription.canAddSubscribersGroup,
+      canSubscribeGroup: subscription.canSubscribeGroup,
       streamWeeklyTraffic: subscription.streamWeeklyTraffic,
     );
   }
@@ -668,8 +710,8 @@ enum ChannelPropertyName {
   messageRetentionDays,
   @JsonValue('stream_post_policy')
   channelPostPolicy,
-  // canRemoveSubscribersGroup, // TODO(#814)
-  // canRemoveSubscribersGroupId, // TODO(#814) handle // TODO(server-8) remove
+  canAddSubscribersGroup,
+  canSubscribeGroup,
   streamWeeklyTraffic;
 
   /// Get a [ChannelPropertyName] from a raw, snake-case string we recognize, else null.
@@ -749,6 +791,8 @@ class Subscription extends ZulipStream {
     required super.historyPublicToSubscribers,
     required super.messageRetentionDays,
     required super.channelPostPolicy,
+    required super.canAddSubscribersGroup,
+    required super.canSubscribeGroup,
     required super.streamWeeklyTraffic,
     required this.desktopNotifications,
     required this.emailNotifications,
@@ -1271,18 +1315,11 @@ enum MessageEditState {
         continue;
       }
 
-      // TODO(server-5) prev_subject was the old name of prev_topic on pre-5.0 servers
-      final prevTopicStr = (entry['prev_topic'] ?? entry['prev_subject']) as String?;
-      final prevTopic = prevTopicStr == null ? null : TopicName.fromJson(prevTopicStr);
-      final topicStr = entry['topic'] as String?;
-      final topic = topicStr == null ? null : TopicName.fromJson(topicStr);
-      if (prevTopic != null) {
-        // TODO(server-5) pre-5.0 servers do not have the 'topic' field
-        if (topic == null) {
-          hasMoved = true;
-        } else {
-          hasMoved |= !topicMoveWasResolveOrUnresolve(topic, prevTopic);
-        }
+      final prevTopicStr = entry['prev_topic'] as String?;
+      if (prevTopicStr != null) {
+        final prevTopic = TopicName.fromJson(prevTopicStr);
+        final topic = TopicName.fromJson(entry['topic'] as String);
+        hasMoved |= !topicMoveWasResolveOrUnresolve(topic, prevTopic);
       }
     }
 

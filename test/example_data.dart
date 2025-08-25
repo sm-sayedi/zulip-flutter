@@ -198,6 +198,8 @@ int _lastUserGroupId = 100;
 
 UserGroup userGroup({
   int? id,
+  Iterable<int>? members,
+  Iterable<int>? directSubgroupIds,
   String? name,
   String? description,
   bool isSystemGroup = false,
@@ -205,12 +207,20 @@ UserGroup userGroup({
 }) {
   return UserGroup(
     id: id ??= _nextUserGroupId(),
+    members: Set.of(members ?? []),
+    directSubgroupIds: Set.of(directSubgroupIds ?? []),
     name: name ??= 'group-$id',
     description: description ?? 'A group named $name',
     isSystemGroup: isSystemGroup,
     deactivated: deactivated,
   );
 }
+
+final UserGroup nobodyGroup = userGroup(
+  isSystemGroup: true,
+  name: 'role:nobody', description: 'Nobody',
+  members: [], directSubgroupIds: [],
+);
 
 RealmEmojiItem realmEmojiItem({
   required String emojiCode,
@@ -274,7 +284,6 @@ User user({
     fullName: fullName ?? 'A user', // TODO generate example names
     dateJoined: dateJoined ?? '2024-02-24T11:18+00:00',
     isActive: isActive ?? true,
-    isBillingAdmin: false,
     isBot: isBot ?? false,
     botType: null,
     botOwnerId: null,
@@ -314,6 +323,7 @@ Account account({
     ackedPushToken: ackedPushToken,
   );
 }
+const _account = account;
 
 /// A [User] which throws on attempting to mutate any of its fields.
 ///
@@ -331,7 +341,6 @@ class _ImmutableUser extends User {
     fullName: user.fullName,
     dateJoined: user.dateJoined,
     isActive: user.isActive,
-    isBillingAdmin: user.isBillingAdmin,
     isBot: user.isBot,
     botType: user.botType,
     botOwnerId: user.botOwnerId,
@@ -356,7 +365,6 @@ class _ImmutableUser extends User {
   @override set fullName(_) => throw _error;
   // dateJoined already immutable
   @override set isActive(_) => throw _error;
-  @override set isBillingAdmin(_) => throw _error;
   // isBot already immutable
   // botType already immutable
   @override set botOwnerId(_) => throw _error;
@@ -435,6 +443,8 @@ ZulipStream stream({
   bool? historyPublicToSubscribers,
   int? messageRetentionDays,
   ChannelPostPolicy? channelPostPolicy,
+  GroupSettingValue? canAddSubscribersGroup,
+  GroupSettingValue? canSubscribeGroup,
   int? streamWeeklyTraffic,
 }) {
   _checkPositive(streamId, 'stream ID');
@@ -454,6 +464,8 @@ ZulipStream stream({
     historyPublicToSubscribers: historyPublicToSubscribers ?? true,
     messageRetentionDays: messageRetentionDays,
     channelPostPolicy: channelPostPolicy ?? ChannelPostPolicy.any,
+    canAddSubscribersGroup: canAddSubscribersGroup ?? GroupSettingValueNamed(nobodyGroup.id),
+    canSubscribeGroup: canSubscribeGroup ?? GroupSettingValueNamed(nobodyGroup.id),
     streamWeeklyTraffic: streamWeeklyTraffic,
   );
 }
@@ -492,6 +504,8 @@ Subscription subscription(
     historyPublicToSubscribers: stream.historyPublicToSubscribers,
     messageRetentionDays: stream.messageRetentionDays,
     channelPostPolicy: stream.channelPostPolicy,
+    canAddSubscribersGroup: stream.canAddSubscribersGroup,
+    canSubscribeGroup: stream.canSubscribeGroup,
     streamWeeklyTraffic: stream.streamWeeklyTraffic,
     desktopNotifications: desktopNotifications ?? false,
     emailNotifications: emailNotifications ?? false,
@@ -943,7 +957,7 @@ DeleteMessageEvent deleteMessageEvent(List<StreamMessage> messages) {
 UpdateMessageEvent updateMessageEditEvent(
   Message origMessage, {
   int? userId = -1, // null means null; default is [selfUser.userId]
-  bool? renderingOnly = false,
+  bool renderingOnly = false,
   int? messageId,
   List<MessageFlag>? flags,
   int? editTimestamp,
@@ -1163,6 +1177,9 @@ ChannelUpdateEvent channelUpdateEvent(
       assert(value is int?);
     case ChannelPropertyName.channelPostPolicy:
       assert(value is ChannelPostPolicy);
+    case ChannelPropertyName.canAddSubscribersGroup:
+    case ChannelPropertyName.canSubscribeGroup:
+      assert(value is GroupSettingValue);
     case ChannelPropertyName.streamWeeklyTraffic:
       assert(value is int?);
   }
@@ -1224,6 +1241,7 @@ InitialSnapshot initialSnapshot({
   int? realmWaitingPeriodThreshold,
   bool? realmAllowMessageEditing,
   int? realmMessageContentEditLimitSeconds,
+  bool? realmEnableReadReceipts,
   bool? realmPresenceDisabled,
   Map<String, RealmDefaultExternalAccount>? realmDefaultExternalAccounts,
   int? maxFileUploadSizeMib,
@@ -1271,13 +1289,14 @@ InitialSnapshot initialSnapshot({
     realmWaitingPeriodThreshold: realmWaitingPeriodThreshold ?? 0,
     realmAllowMessageEditing: realmAllowMessageEditing ?? true,
     realmMessageContentEditLimitSeconds: realmMessageContentEditLimitSeconds,
+    realmEnableReadReceipts: realmEnableReadReceipts ?? true,
     realmPresenceDisabled: realmPresenceDisabled ?? false,
     realmDefaultExternalAccounts: realmDefaultExternalAccounts ?? {},
     maxFileUploadSizeMib: maxFileUploadSizeMib ?? 25,
     serverEmojiDataUrl: serverEmojiDataUrl
       ?? realmUrl.replace(path: '/static/emoji.json'),
     realmEmptyTopicDisplayName: realmEmptyTopicDisplayName ?? defaultRealmEmptyTopicDisplayName,
-    realmUsers: realmUsers ?? [],
+    realmUsers: realmUsers ?? [selfUser],
     realmNonActiveUsers: realmNonActiveUsers ?? [],
     crossRealmBots: crossRealmBots ?? [],
   );
@@ -1286,10 +1305,13 @@ const _initialSnapshot = initialSnapshot;
 
 PerAccountStore store({
   GlobalStore? globalStore,
+  User? selfUser,
   Account? account,
   InitialSnapshot? initialSnapshot,
 }) {
-  final effectiveAccount = account ?? selfAccount;
+  assert(!(account != null && selfUser != null));
+  final effectiveAccount = account
+    ?? (selfUser != null ? _account(user: selfUser) : selfAccount);
   return PerAccountStore.fromInitialSnapshot(
     globalStore: globalStore ?? _globalStore(accounts: [effectiveAccount]),
     accountId: effectiveAccount.id,

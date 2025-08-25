@@ -178,8 +178,8 @@ class ComposeAutocomplete extends AutocompleteField<ComposeAutocompleteQuery, Co
   @override
   ComposeAutocompleteView initViewModel(BuildContext context, ComposeAutocompleteQuery query) {
     final store = PerAccountStoreWidget.of(context);
-    final localizations = ZulipLocalizations.of(context);
-    return query.initViewModel(store: store, localizations: localizations,
+    final zulipLocalizations = ZulipLocalizations.of(context);
+    return query.initViewModel(store: store, localizations: zulipLocalizations,
       narrow: narrow);
   }
 
@@ -208,7 +208,7 @@ class ComposeAutocomplete extends AutocompleteField<ComposeAutocompleteQuery, Co
           // and losing data for the user.
           return;
         }
-        // TODO(i18n) language-appropriate space character; check active keyboard?
+        // TODO(#1805) language-appropriate space character; check active keyboard?
         //   (maybe handle centrally in `controller`)
         replacementString = '${userMention(user, silent: query.silent, users: store)} ';
       case WildcardMentionAutocompleteResult(:var wildcardOption):
@@ -223,7 +223,7 @@ class ComposeAutocomplete extends AutocompleteField<ComposeAutocompleteQuery, Co
           // and losing data for the group.
           return;
         }
-        // TODO(i18n) language-appropriate space character; check active keyboard?
+        // TODO(#1805) language-appropriate space character; check active keyboard?
         //   (maybe handle centrally in `controller`)
         replacementString = '${userGroupMention(userGroup.name, silent: query.silent)} ';
     }
@@ -273,18 +273,18 @@ class MentionAutocompleteItem extends StatelessWidget {
   }) {
     final isDmNarrow = narrow is DmNarrow;
     final isChannelWildcardAvailable = store.zulipFeatureLevel >= 247; // TODO(server-9)
-    final localizations = ZulipLocalizations.of(context);
+    final zulipLocalizations = ZulipLocalizations.of(context);
     return switch (wildcardOption) {
       WildcardMentionOption.all || WildcardMentionOption.everyone => isDmNarrow
-        ? localizations.wildcardMentionAllDmDescription
+        ? zulipLocalizations.wildcardMentionAllDmDescription
         : isChannelWildcardAvailable
-            ? localizations.wildcardMentionChannelDescription
-            : localizations.wildcardMentionStreamDescription,
-      WildcardMentionOption.channel => localizations.wildcardMentionChannelDescription,
+            ? zulipLocalizations.wildcardMentionChannelDescription
+            : zulipLocalizations.wildcardMentionStreamDescription,
+      WildcardMentionOption.channel => zulipLocalizations.wildcardMentionChannelDescription,
       WildcardMentionOption.stream => isChannelWildcardAvailable
-        ? localizations.wildcardMentionChannelDescription
-        : localizations.wildcardMentionStreamDescription,
-      WildcardMentionOption.topic => localizations.wildcardMentionTopicDescription,
+        ? zulipLocalizations.wildcardMentionChannelDescription
+        : zulipLocalizations.wildcardMentionStreamDescription,
+      WildcardMentionOption.topic => zulipLocalizations.wildcardMentionTopicDescription,
     };
   }
 

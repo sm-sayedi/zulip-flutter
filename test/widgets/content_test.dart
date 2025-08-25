@@ -186,11 +186,11 @@ void main() {
   /// [styleFinder] must return the [TextStyle] containing the "wght"
   /// (in [TextStyle.fontVariations]) and the [TextStyle.fontWeight]
   /// to be checked.
-  Future<void> testFontWeight(String description, {
+  void testFontWeight(String description, {
     required Widget content,
     required double expectedWght,
     required TextStyle Function(WidgetTester tester) styleFinder,
-  }) async {
+  }) {
     for (final platformRequestsBold in [false, true]) {
       testWidgets(
         description + (platformRequestsBold ? ' (platform requests bold)' : ''),
@@ -707,7 +707,17 @@ void main() {
           '<tbody>\n<tr>\n<td>text</td>\n</tr>\n</tbody>\n'
           '</table>'),
       styleFinder: findWordBold);
+
+    testWidgets('has strike-through line in strike-through', (tester) async {
+      // Regression test for: https://github.com/zulip/zulip-flutter/issues/1817
+      await prepareContent(tester,
+        plainContent('<p><del><strong>bold</strong></del></p>'));
+      final style = mergedStyleOf(tester, 'bold');
+      check(style!.decoration).equals(TextDecoration.lineThrough);
+    });
   });
+
+  testContentSmoke(ContentExample.deleted);
 
   testContentSmoke(ContentExample.emphasis);
 
@@ -718,6 +728,22 @@ void main() {
       await checkFontSizeRatio(tester,
         targetHtml: '<code>code</code>',
         targetFontSizeFinder: mkTargetFontSizeFinderFromPattern('code'));
+    });
+
+    testFontWeight('is bold in bold span',
+      // Regression test for: https://github.com/zulip/zulip-flutter/issues/1812
+      expectedWght: 600,
+      // **`bold`**
+      content: plainContent('<p><strong><code>bold</code></strong></p>'),
+      styleFinder: (tester) => mergedStyleOf(tester, 'bold')!,
+    );
+
+    testWidgets('is link-colored in link span', (tester) async {
+      // Regression test for: https://github.com/zulip/zulip-flutter/issues/806
+      await prepareContent(tester,
+        plainContent('<p><a href="https://example/"><code>code</code></a></p>'));
+      final style = mergedStyleOf(tester, 'code');
+      check(style!.color).equals(const HSLColor.fromAHSL(1, 200, 1, 0.4).toColor());
     });
   });
 
@@ -980,6 +1006,14 @@ void main() {
           _ => throw StateError('unexpected platform in test'),
         });
     }, variant: const TargetPlatformVariant({TargetPlatform.android, TargetPlatform.iOS}));
+
+    testWidgets('has strike-through line in strike-through', (tester) async {
+      // Regression test for https://github.com/zulip/zulip-flutter/issues/1818
+      await prepareContent(tester,
+        plainContent('<p><del>foo<span aria-label="thumbs up" class="emoji emoji-1f44d" role="img" title="thumbs up">:thumbs_up:</span>bar</del></p>'));
+      final style = mergedStyleOf(tester, '\u{1f44d}');
+      check(style!.decoration).equals(TextDecoration.lineThrough);
+    });
   });
 
   group('inline math', () {
@@ -1010,27 +1044,35 @@ void main() {
         });
     });
 
-    testWidgets('maintains font-size ratio with surrounding text, when falling back to TeX source', (tester) async {
-      const unsupportedHtml = '<span class="katex">'
-        '<span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>λ</mi></mrow>'
-          '<annotation encoding="application/x-tex"> \\lambda </annotation></semantics></math></span>'
-        '<span class="katex-html" aria-hidden="true">'
-          '<span class="base unknown">' // Server doesn't generate this 'unknown' class.
-          '<span class="strut" style="height:0.6944em;"></span>'
-          '<span class="mord mathnormal">λ</span></span></span></span>';
-      await checkFontSizeRatio(tester,
-        targetHtml: unsupportedHtml,
-        targetFontSizeFinder: mkTargetFontSizeFinderFromPattern(r'\lambda'));
-    });
+    group('fallback to displaying KaTeX source if unsupported KaTeX HTML', () {
+      testContentSmoke(ContentExample.mathInlineUnknown);
 
-    testWidgets('displays KaTeX content', (tester) async {
-      await prepareContent(tester, plainContent(ContentExample.mathInline.html));
-      tester.widget(find.text('λ', findRichText: true));
-    });
+      assert(ContentExample.mathInlineUnknown.html.startsWith('<p>'));
+      assert(ContentExample.mathInlineUnknown.html.endsWith('</p>'));
+      final unsupportedKatexHtml = ContentExample.mathInlineUnknown.html
+        .substring(3, ContentExample.mathInlineUnknown.html.length - 4);
+      final expectedText = ContentExample.mathInlineUnknown.expectedText!;
 
-    testWidgets('fallback to displaying KaTeX source if unsupported KaTeX HTML', (tester) async {
-      await prepareContent(tester, plainContent(ContentExample.mathInlineUnknown.html));
-      tester.widget(find.text(r'\lambda'));
+      testWidgets('maintains font-size ratio with surrounding text, when falling back to TeX source', (tester) async {
+        await checkFontSizeRatio(tester,
+          targetHtml: unsupportedKatexHtml,
+          targetFontSizeFinder: mkTargetFontSizeFinderFromPattern(expectedText));
+      });
+
+      testFontWeight('is bold in bold span',
+        // Regression test for: https://github.com/zulip/zulip-flutter/issues/1812
+        expectedWght: 600,
+        content: plainContent('<p><strong>$unsupportedKatexHtml</strong></p>'),
+        styleFinder: (tester) => mergedStyleOf(tester, expectedText)!,
+      );
+
+      testWidgets('is link-colored in link span', (tester) async {
+        // Regression test for: https://github.com/zulip/zulip-flutter/issues/806
+        await prepareContent(tester,
+          plainContent('<p><a href="https://example/">$unsupportedKatexHtml</a></p>'));
+        final style = mergedStyleOf(tester, expectedText);
+        check(style!.color).equals(const HSLColor.fromAHSL(1, 200, 1, 0.4).toColor());
+      });
     });
   });
 

@@ -15,118 +15,6 @@ import '../fake_api.dart';
 import 'route_checks.dart';
 
 void main() {
-  group('getMessageCompat', () {
-    Future<Message?> checkGetMessageCompat(FakeApiConnection connection, {
-      required bool expectLegacy,
-      required int messageId,
-      bool? applyMarkdown,
-      required bool allowEmptyTopicName,
-    }) async {
-      final result = await getMessageCompat(connection,
-        messageId: messageId,
-        applyMarkdown: applyMarkdown,
-        allowEmptyTopicName: allowEmptyTopicName,
-      );
-      if (expectLegacy) {
-        check(connection.lastRequest).isA<http.Request>()
-          ..method.equals('GET')
-          ..url.path.equals('/api/v1/messages')
-          ..url.queryParameters.deepEquals({
-            'narrow': jsonEncode([ApiNarrowMessageId(messageId)]),
-            'anchor': messageId.toString(),
-            'num_before': '0',
-            'num_after': '0',
-            if (applyMarkdown != null) 'apply_markdown': applyMarkdown.toString(),
-            'allow_empty_topic_name': allowEmptyTopicName.toString(),
-            'client_gravatar': 'true',
-          });
-      } else {
-        check(connection.lastRequest).isA<http.Request>()
-          ..method.equals('GET')
-          ..url.path.equals('/api/v1/messages/$messageId')
-          ..url.queryParameters.deepEquals({
-            if (applyMarkdown != null) 'apply_markdown': applyMarkdown.toString(),
-            'allow_empty_topic_name': allowEmptyTopicName.toString(),
-          });
-      }
-      return result;
-    }
-
-    test('modern; message found', () {
-      return FakeApiConnection.with_((connection) async {
-        final message = eg.streamMessage();
-        final fakeResult = GetMessageResult(message: message);
-        connection.prepare(json: fakeResult.toJson());
-        final result = await checkGetMessageCompat(connection,
-          expectLegacy: false,
-          messageId: message.id,
-          applyMarkdown: true,
-          allowEmptyTopicName: true,
-        );
-        check(result).isNotNull().jsonEquals(message);
-      });
-    });
-
-    test('modern; message not found', () {
-      return FakeApiConnection.with_((connection) async {
-        final message = eg.streamMessage();
-        connection.prepare(
-          apiException: eg.apiBadRequest(message: 'Invalid message(s)'));
-        final result = await checkGetMessageCompat(connection,
-          expectLegacy: false,
-          messageId: message.id,
-          applyMarkdown: true,
-          allowEmptyTopicName: true,
-        );
-        check(result).isNull();
-      });
-    });
-
-    test('legacy; message found', () {
-      return FakeApiConnection.with_(zulipFeatureLevel: 119, (connection) async {
-        final message = eg.streamMessage();
-        final fakeResult = GetMessagesResult(
-          anchor: message.id,
-          foundNewest: false,
-          foundOldest: false,
-          foundAnchor: true,
-          historyLimited: false,
-          messages: [message],
-        );
-        connection.prepare(json: fakeResult.toJson());
-        final result = await checkGetMessageCompat(connection,
-          expectLegacy: true,
-          messageId: message.id,
-          applyMarkdown: true,
-          allowEmptyTopicName: true,
-        );
-        check(result).isNotNull().jsonEquals(message);
-      });
-    });
-
-    test('legacy; message not found', () {
-      return FakeApiConnection.with_(zulipFeatureLevel: 119, (connection) async {
-        final message = eg.streamMessage();
-        final fakeResult = GetMessagesResult(
-          anchor: message.id,
-          foundNewest: false,
-          foundOldest: false,
-          foundAnchor: false,
-          historyLimited: false,
-          messages: [],
-        );
-        connection.prepare(json: fakeResult.toJson());
-        final result = await checkGetMessageCompat(connection,
-          expectLegacy: true,
-          messageId: message.id,
-          applyMarkdown: true,
-          allowEmptyTopicName: true,
-        );
-        check(result).isNull();
-      });
-    });
-  });
-
   group('getMessage', () {
     Future<GetMessageResult> checkGetMessage(
       FakeApiConnection connection, {
@@ -186,16 +74,6 @@ void main() {
           expected: {'allow_empty_topic_name': 'true'});
       });
     });
-
-    test('Throws assertion error when FL <120', () {
-      return FakeApiConnection.with_(zulipFeatureLevel: 119, (connection) async {
-        connection.prepare(json: fakeResult.toJson());
-        check(() => getMessage(connection,
-          messageId: 1,
-          allowEmptyTopicName: true,
-        )).throws<AssertionError>();
-      });
-    });
   });
 
   test('ApiNarrow.toJson', () {
@@ -214,14 +92,14 @@ void main() {
 
       checkNarrow(const CombinedFeedNarrow().apiEncode(), jsonEncode([]));
       checkNarrow(const ChannelNarrow(12).apiEncode(), jsonEncode([
-        {'operator': 'stream', 'operand': 12},
+        {'operator': 'channel', 'operand': 12},
       ]));
       checkNarrow(eg.topicNarrow(12, 'stuff').apiEncode(), jsonEncode([
-        {'operator': 'stream', 'operand': 12},
+        {'operator': 'channel', 'operand': 12},
         {'operator': 'topic', 'operand': 'stuff'},
       ]));
       checkNarrow(eg.topicNarrow(12, 'stuff', with_: 1).apiEncode(), jsonEncode([
-        {'operator': 'stream', 'operand': 12},
+        {'operator': 'channel', 'operand': 12},
         {'operator': 'topic', 'operand': 'stuff'},
         {'operator': 'with', 'operand': 1},
       ]));
@@ -235,7 +113,7 @@ void main() {
 
       connection.zulipFeatureLevel = 270;
       checkNarrow(eg.topicNarrow(12, 'stuff', with_: 1).apiEncode(), jsonEncode([
-        {'operator': 'stream', 'operand': 12},
+        {'operator': 'channel', 'operand': 12},
         {'operator': 'topic', 'operand': 'stuff'},
       ]));
       checkNarrow([ApiNarrowDm([123, 234])], jsonEncode([
@@ -243,6 +121,19 @@ void main() {
       ]));
       checkNarrow([ApiNarrowDm([123, 234]), ApiNarrowWith(1)], jsonEncode([
         {'operator': 'dm', 'operand': [123, 234]},
+      ]));
+
+      connection.zulipFeatureLevel = 249;
+      checkNarrow(const ChannelNarrow(12).apiEncode(), jsonEncode([
+        {'operator': 'stream', 'operand': 12},
+      ]));
+      checkNarrow(eg.topicNarrow(12, 'stuff').apiEncode(), jsonEncode([
+        {'operator': 'stream', 'operand': 12},
+        {'operator': 'topic', 'operand': 'stuff'},
+      ]));
+      checkNarrow(eg.topicNarrow(12, 'stuff', with_: 1).apiEncode(), jsonEncode([
+        {'operator': 'stream', 'operand': 12},
+        {'operator': 'topic', 'operand': 'stuff'},
       ]));
 
       connection.zulipFeatureLevel = 176;
@@ -827,6 +718,17 @@ void main() {
             'flag': 'read',
           });
       });
+    });
+  });
+
+  test('smoke getReadReceipts', () {
+    return FakeApiConnection.with_((connection) async {
+      final response = GetReadReceiptsResult(userIds: [7, 6543, 210]);
+      connection.prepare(json: response.toJson());
+      await getReadReceipts(connection, messageId: 123321);
+      check(connection.takeRequests()).single.isA<http.Request>()
+        ..method.equals('GET')
+        ..url.path.equals('/api/v1/messages/123321/read_receipts');
     });
   });
 }

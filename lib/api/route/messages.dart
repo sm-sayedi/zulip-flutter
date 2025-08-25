@@ -1,69 +1,18 @@
 import 'package:json_annotation/json_annotation.dart';
 
 import '../core.dart';
-import '../exception.dart';
 import '../model/model.dart';
 import '../model/narrow.dart';
 
 part 'messages.g.dart';
 
-/// Convenience function to get a single message from any server.
-///
-/// This encapsulates a server-feature check.
-///
-/// Gives null if the server reports that the message doesn't exist.
-// TODO(server-5) Simplify this away; just use getMessage.
-Future<Message?> getMessageCompat(ApiConnection connection, {
-  required int messageId,
-  bool? applyMarkdown,
-  required bool allowEmptyTopicName,
-}) async {
-  final useLegacyApi = connection.zulipFeatureLevel! < 120;
-  if (useLegacyApi) {
-    final response = await getMessages(connection,
-      narrow: [ApiNarrowMessageId(messageId)],
-      anchor: NumericAnchor(messageId),
-      numBefore: 0,
-      numAfter: 0,
-      applyMarkdown: applyMarkdown,
-      allowEmptyTopicName: allowEmptyTopicName,
-
-      // Hard-code this param to `true`, as the new single-message API
-      // effectively does:
-      //   https://chat.zulip.org/#narrow/stream/378-api-design/topic/.60client_gravatar.60.20in.20.60messages.2F.7Bmessage_id.7D.60/near/1418337
-      clientGravatar: true,
-    );
-    return response.messages.firstOrNull;
-  } else {
-    try {
-      final response = await getMessage(connection,
-        messageId: messageId,
-        applyMarkdown: applyMarkdown,
-        allowEmptyTopicName: allowEmptyTopicName,
-      );
-      return response.message;
-    } on ZulipApiException catch (e) {
-      if (e.code == 'BAD_REQUEST') {
-        // Servers use this code when the message doesn't exist, according to
-        // the example in the doc.
-        return null;
-      }
-      rethrow;
-    }
-  }
-}
-
 /// https://zulip.com/api/get-message
-///
-/// This binding only supports feature levels 120+.
-// TODO(server-5) remove FL 120+ mention in doc, and the related `assert`
 Future<GetMessageResult> getMessage(ApiConnection connection, {
   required int messageId,
   bool? applyMarkdown,
   required bool allowEmptyTopicName,
 }) {
   assert(allowEmptyTopicName, '`allowEmptyTopicName` should only be true');
-  assert(connection.zulipFeatureLevel! >= 120);
   return connection.get('getMessage', GetMessageResult.fromJson, 'messages/$messageId', {
     if (applyMarkdown != null) 'apply_markdown': applyMarkdown,
     'allow_empty_topic_name': allowEmptyTopicName,
@@ -435,4 +384,24 @@ class UpdateMessageFlagsForNarrowResult {
     _$UpdateMessageFlagsForNarrowResultFromJson(json);
 
   Map<String, dynamic> toJson() => _$UpdateMessageFlagsForNarrowResultToJson(this);
+}
+
+/// https://zulip.com/api/get-read-receipts
+Future<GetReadReceiptsResult> getReadReceipts(ApiConnection connection, {
+  required int messageId,
+}) {
+  return connection.get('getReadReceipts', GetReadReceiptsResult.fromJson,
+    'messages/$messageId/read_receipts', null);
+}
+
+@JsonSerializable(fieldRename: FieldRename.snake)
+class GetReadReceiptsResult {
+  const GetReadReceiptsResult({required this.userIds});
+
+  final List<int> userIds;
+
+  factory GetReadReceiptsResult.fromJson(Map<String, dynamic> json) =>
+    _$GetReadReceiptsResultFromJson(json);
+
+  Map<String, dynamic> toJson() => _$GetReadReceiptsResultToJson(this);
 }

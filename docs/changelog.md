@@ -3,6 +3,119 @@
 ## Unreleased
 
 
+## 30.0.264 (2025-08-20)
+
+### Highlights for users (since last mainline release, v30.0.263)
+
+* (Android) Paste an image into a message, or insert a sticker from
+  your keyboard. (#1173, #419)
+* Autocomplete matches people's names regardless of diacritics. (#237)
+* Show message separated from last after a 10-minute gap. (#1773)
+* Link to channel feed in channel action sheet. (#1705)
+* Too many other improvements and fixes to describe them all here.
+
+
+### Highlights for developers (since last mainline release, v30.0.263)
+
+* User-visible changes not described above:
+  * upgrade Flutter (PR #1791)
+  * show error dialog on edit-message request error (PR #1792)
+  * generate narrow links with "channel", vs "stream" (#633)
+  * TeX: big operators, null delimiters (#1671, #1677)
+  * several tweaks to set-status page (#1769, #1770, #1771)
+  * hide topic-list button in channel action sheet when redundant
+    (in PR #1794, for #1705)
+  * wildcard-mention autocomplete case-insensitive
+    (in PR #1806, for #237)
+  * emoji autocomplete insensitive to diacritics (#1067)
+  * new-DM search insensitive to diacritics
+    (in PR #1806, for #237)
+  * who-reacted and read-receipts sheets now draggable-scrollable
+    (PR #1802)
+  * translations (PR #1809)
+  * propagate nested text styles in several cases (#1818, #1817, #806,
+    #1812)
+
+* In tests, the user list always includes the self-user. (PR #1814)
+
+* Resolved in the beta-prelaunch branch (and v0.0.34): #1603
+
+* Resolved in main: #268, PR #1791, #1647, PR #1792, #633, #419,
+  #1173, #1677, #1671, #1769, #1770, #1771, PR #1814, #1705, #237,
+  #1067, PR #1802, PR #1809, #1818, #1817, #806, #1812, #1773
+
+
+## 0.0.34 (2025-08-18)
+
+This is a release from the "beta-prelaunch" branch, with selected
+changes atop the previous pre-launch beta release 0.0.33.
+
+
+### Highlights for users
+
+Thanks for being a beta tester of the new Zulip app!
+
+This app became the main Zulip mobile app in June 2025, and this
+beta version is no longer maintained.  We recommend uninstalling
+this beta after switching to the main Zulip app, in order to get
+the latest features and bug fixes.
+
+Changes in this version from the previous beta:
+* Give a notice on startup that this beta version is no longer
+  maintained, with links to switch to the main Zulip app. (#1603)
+
+
+### Highlights for developers
+
+* Resolved in this beta branch: #1603
+
+
+## 30.0.263 (2025-08-12)
+
+### Highlights for users
+
+* (Android) Share to Zulip from other apps. (#53)
+* See read receipts. (#667)
+* Autocomplete mentioning a group. (#233)
+* Fix bug when uploading a file with a non-ASCII name. (#1709)
+* Copy link to a channel or topic. (#1227, #792)
+* Zoom in farther in lightbox. (#1091)
+* Subscribe or unsubscribe to a channel. (#1224)
+
+
+### Highlights for developers
+
+* User-visible changes not described above:
+  * upgrade Flutter (PR #1763)
+  * drop "always scrollable" on list of suggested statuses
+    (in caf1ddb7b; revision to PR #1701, for #198)
+  * handle colored text in KaTeX content (#1679)
+  * user autocomplete matches on email (#236)
+  * semantics on reaction chips; no tooltip; "You" first
+    (41e3d57f2, b2321839f, 025b0cee8; revision to PR #1700, for #740)
+  * various changes to who-reacted feature
+    (in e2c10ae21; revision to PR #1700, for #740):
+    * show who-reacted button only when there was a reaction
+    * fix an edge case in who-reacted sheet: don't re-apply
+      initialReactionType on new store
+    * dispose in _ViewReactionsState, fixing potential get-stuck bug
+    * align emoji in center of who-reacted header, not start
+    * semantics in who-reacted sheet
+  * adjust scroll-into-view behavior in who-reacted header
+    (98b94bd2a; revision to PR #1700, for #740)
+  * Cupertino dialogs (#996, PR #1782)
+  * mark-channel-read button at top of action sheet (PR #1789)
+  * reject login sooner when server too old (PR #1783)
+  * translations (PR #1757)
+
+* Set visualDensity to mobile value on desktop, fixing assert in
+  buttons (PR #1781)
+
+* Resolved in main: #332, PR #1763, #1227, #792, #198, #1679, #1709,
+  #1091, #236, #233, #740, #996, PR #1781, PR #1782, PR #1789,
+  PR #1783, #1224, PR #1757, #667, #53
+
+
 ## 30.0.262 (2025-07-24)
 
 This release branch includes some experimental changes

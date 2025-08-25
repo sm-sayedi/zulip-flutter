@@ -1127,8 +1127,7 @@ class _InlineContentBuilder {
 
       case UnicodeEmojiNode():
         return TextSpan(text: node.emojiUnicode, recognizer: _recognizer,
-          style: widget.style
-            .merge(ContentTheme.of(_context!).textStyleEmoji));
+          style: ContentTheme.of(_context!).textStyleEmoji);
 
       case ImageEmojiNode():
         return WidgetSpan(alignment: PlaceholderAlignment.middle,
@@ -1138,9 +1137,8 @@ class _InlineContentBuilder {
         final nodes = node.nodes;
         return nodes == null
           ? TextSpan(
-              style: widget.style
-                .merge(ContentTheme.of(_context!).textStyleInlineMath)
-                .apply(fontSizeFactor: kInlineCodeFontSizeFactor),
+              style: ContentTheme.of(_context!).textStyleInlineMath
+                .copyWith(fontSize: widget.style.fontSize! * kInlineCodeFontSizeFactor),
               children: [TextSpan(text: node.texSource)])
           : WidgetSpan(
               alignment: PlaceholderAlignment.baseline,
@@ -1181,11 +1179,9 @@ class _InlineContentBuilder {
     // TODO `code`: find equivalent of web's `unicode-bidi: embed; direction: ltr`
 
     return _buildNodes(
-      style: widget.style
-        .merge(ContentTheme.of(_context!).textStyleInlineCode)
-        .apply(fontSizeFactor: kInlineCodeFontSizeFactor),
-      node.nodes,
-    );
+      style: ContentTheme.of(_context!).textStyleInlineCode
+        .copyWith(fontSize: widget.style.fontSize! * kInlineCodeFontSizeFactor),
+      node.nodes);
 
     // Another fun solution -- we can in fact have a border!  Like so:
     //   TextStyle(

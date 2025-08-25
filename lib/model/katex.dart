@@ -386,6 +386,7 @@ class _KatexParser {
     final spanClasses = element.className != ''
       ? List<String>.unmodifiable(element.className.split(' '))
       : const <String>[];
+    double? widthEm;
     String? fontFamily;
     double? fontSizeEm;
     KatexSpanFontWeight? fontWeight;
@@ -576,7 +577,11 @@ class _KatexParser {
             _ => throw _KatexHtmlParseError(),
           };
 
-        // TODO handle .nulldelimiter and .delimcenter .
+        case 'nulldelimiter':
+          // .nulldelimiter { display: inline-block; width: 0.12em; }
+          widthEm = 0.12;
+
+        // TODO .delimcenter .
 
         case 'op-symbol':
           // .op-symbol { ... }
@@ -621,6 +626,7 @@ class _KatexParser {
 
     final inlineStyles = _parseInlineStyles(element);
     final styles = KatexSpanStyles(
+      widthEm: widthEm,
       fontFamily: fontFamily,
       fontSizeEm: fontSizeEm,
       fontWeight: fontWeight,
@@ -631,6 +637,7 @@ class _KatexParser {
       marginLeftEm: _takeStyleEm(inlineStyles, 'margin-left'),
       marginRightEm: _takeStyleEm(inlineStyles, 'margin-right'),
       color: _takeStyleColor(inlineStyles, 'color'),
+      position: _takeStylePosition(inlineStyles, 'position'),
       // TODO handle more CSS properties
     );
     if (inlineStyles != null && inlineStyles.isNotEmpty) {
@@ -640,10 +647,10 @@ class _KatexParser {
         _hasError = true;
       }
     }
-    // Currently, we expect `top` to only be inside a vlist, and
-    // we handle that case separately above.
-    if (styles.topEm != null) {
-      throw _KatexHtmlParseError('unsupported inline CSS property: top');
+    if (styles.topEm != null && styles.position != KatexSpanPosition.relative) {
+      // The meaning of `top` would be different without `position: relative`.
+      throw _KatexHtmlParseError(
+        'unsupported inline CSS property "top" given "position: ${styles.position}"');
     }
 
     String? text;
@@ -765,6 +772,34 @@ class _KatexParser {
     _hasError = true;
     return null;
   }
+
+  /// Remove the given property from the given style map,
+  /// and parse as a CSS position value.
+  ///
+  /// If the property is present but is not a valid CSS position value,
+  /// record an error and return null.
+  ///
+  /// If the property is absent, return null with no error.
+  ///
+  /// If the map is null, treat it as empty.
+  ///
+  /// To produce the map this method expects, see [_parseInlineStyles].
+  KatexSpanPosition? _takeStylePosition(Map<String, css_visitor.Expression>? styles, String property) {
+    final expression = styles?.remove(property);
+    if (expression == null) return null;
+    if (expression case css_visitor.LiteralTerm(:final value)) {
+      if (value case css_visitor.Identifier(:final name)) {
+        if (name == 'relative') {
+          return KatexSpanPosition.relative;
+        }
+      }
+    }
+    assert(debugLog('KaTeX: Unsupported value for CSS property $property,'
+      ' expected a CSS position value: ${expression.toDebugString()}'));
+    unsupportedInlineCssProperties.add(property);
+    _hasError = true;
+    return null;
+  }
 }
 
 enum KatexSpanFontWeight {
@@ -780,6 +815,10 @@ enum KatexSpanTextAlign {
   left,
   center,
   right,
+}
+
+enum KatexSpanPosition {
+  relative,
 }
 
 class KatexSpanColor {
@@ -810,6 +849,8 @@ class KatexSpanColor {
 
 @immutable
 class KatexSpanStyles {
+  final double? widthEm;
+
   // TODO(#1674) does height actually appear on generic spans?
   //   In a corpus, the only occurrences that we don't already handle separately
   //   (i.e. occurrences other than on struts, vlists, etc) seem to be within
@@ -832,8 +873,10 @@ class KatexSpanStyles {
   final KatexSpanTextAlign? textAlign;
 
   final KatexSpanColor? color;
+  final KatexSpanPosition? position;
 
   const KatexSpanStyles({
+    this.widthEm,
     this.heightEm,
     this.topEm,
     this.marginRightEm,
@@ -844,11 +887,13 @@ class KatexSpanStyles {
     this.fontStyle,
     this.textAlign,
     this.color,
+    this.position,
   });
 
   @override
   int get hashCode => Object.hash(
     'KatexSpanStyles',
+    widthEm,
     heightEm,
     topEm,
     marginRightEm,
@@ -859,11 +904,13 @@ class KatexSpanStyles {
     fontStyle,
     textAlign,
     color,
+    position,
   );
 
   @override
   bool operator ==(Object other) {
     return other is KatexSpanStyles &&
+      other.widthEm == widthEm &&
       other.heightEm == heightEm &&
       other.topEm == topEm &&
       other.marginRightEm == marginRightEm &&
@@ -873,12 +920,14 @@ class KatexSpanStyles {
       other.fontWeight == fontWeight &&
       other.fontStyle == fontStyle &&
       other.textAlign == textAlign &&
-      other.color == color;
+      other.color == color &&
+      other.position == position;
   }
 
   @override
   String toString() {
     final args = <String>[];
+    if (widthEm != null) args.add('widthEm: $widthEm');
     if (heightEm != null) args.add('heightEm: $heightEm');
     if (topEm != null) args.add('topEm: $topEm');
     if (marginRightEm != null) args.add('marginRightEm: $marginRightEm');
@@ -889,10 +938,12 @@ class KatexSpanStyles {
     if (fontStyle != null) args.add('fontStyle: $fontStyle');
     if (textAlign != null) args.add('textAlign: $textAlign');
     if (color != null) args.add('color: $color');
+    if (position != null) args.add('position: $position');
     return '${objectRuntimeType(this, 'KatexSpanStyles')}(${args.join(', ')})';
   }
 
   KatexSpanStyles filter({
+    bool widthEm = true,
     bool heightEm = true,
     bool verticalAlignEm = true,
     bool topEm = true,
@@ -904,8 +955,10 @@ class KatexSpanStyles {
     bool fontStyle = true,
     bool textAlign = true,
     bool color = true,
+    bool position = true,
   }) {
     return KatexSpanStyles(
+      widthEm: widthEm ? this.widthEm : null,
       heightEm: heightEm ? this.heightEm : null,
       topEm: topEm ? this.topEm : null,
       marginRightEm: marginRightEm ? this.marginRightEm : null,
@@ -916,6 +969,7 @@ class KatexSpanStyles {
       fontStyle: fontStyle ? this.fontStyle : null,
       textAlign: textAlign ? this.textAlign : null,
       color: color ? this.color : null,
+      position: position ? this.position : null,
     );
   }
 }

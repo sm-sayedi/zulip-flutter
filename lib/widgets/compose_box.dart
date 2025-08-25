@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:mime/mime.dart';
+import 'package:path/path.dart' as path;
 
 import '../api/exception.dart';
 import '../api/model/model.dart';
@@ -23,6 +24,7 @@ import 'color.dart';
 import 'dialog.dart';
 import 'icons.dart';
 import 'inset_shadow.dart';
+import 'page.dart';
 import 'store.dart';
 import 'text.dart';
 import 'theme.dart';
@@ -508,6 +510,38 @@ class _ContentInput extends StatelessWidget {
   final String? hintText;
   final bool enabled;
 
+  void _handleContentInserted(BuildContext context, KeyboardInsertedContent content) async {
+    if (content.data == null || content.data!.isEmpty) {
+      // As of writing, the engine implementation never leaves `content.data` as
+      // `null`, but ideally it should be when the data cannot be read for
+      // errors.
+      //
+      // When `content.data` is empty, the data is not literally empty — this
+      // can also happen when the data can't be read from the input stream
+      // provided by the Android SDK because of an IO exception.
+      //
+      // See Flutter engine implementation that prepares this data:
+      //   https://github.com/flutter/flutter/blob/0ffc4ce00/engine/src/flutter/shell/platform/android/io/flutter/plugin/editing/InputConnectionAdaptor.java#L497-L548
+      // TODO(upstream): improve the API for this
+      final zulipLocalizations = ZulipLocalizations.of(context);
+      showErrorDialog(context: context,
+        title: zulipLocalizations.errorContentNotInsertedTitle,
+        message: zulipLocalizations.errorContentToInsertIsEmpty);
+      return;
+    }
+
+    final file = FileToUpload(
+      content: Stream.fromIterable([content.data!]),
+      length: content.data!.length,
+      filename: path.basename(content.uri),
+      mimeType: content.mimeType);
+
+    await controller.uploadFiles(
+      context: context,
+      files: [file],
+      shouldRequestFocus: true);
+  }
+
   static double maxHeight(BuildContext context) {
     final clampingTextScaler = MediaQuery.textScalerOf(context)
       .clamp(maxScaleFactor: 1.5);
@@ -552,6 +586,8 @@ class _ContentInput extends StatelessWidget {
               enabled: enabled,
               controller: controller.content,
               focusNode: controller.contentFocusNode,
+              contentInsertionConfiguration: ContentInsertionConfiguration(
+                onContentInserted: (content) => _handleContentInserted(context, content)),
               // Let the content show through the `contentPadding` so that
               // our [InsetShadowBox] can fade it smoothly there.
               clipBehavior: Clip.none,
@@ -911,8 +947,8 @@ class _EditMessageContentInput extends StatelessWidget {
 ///
 /// A convenience class to represent data from the generic file picker,
 /// the media library, and the camera, in a single form.
-class _File {
-  _File({
+class FileToUpload {
+  FileToUpload({
     required this.content,
     required this.length,
     required this.filename,
@@ -929,14 +965,15 @@ Future<void> _uploadFiles({
   required BuildContext context,
   required ComposeContentController contentController,
   required FocusNode contentFocusNode,
-  required Iterable<_File> files,
+  bool shouldRequestFocus = true,
+  required Iterable<FileToUpload> files,
 }) async {
   assert(context.mounted);
   final store = PerAccountStoreWidget.of(context);
   final zulipLocalizations = ZulipLocalizations.of(context);
 
-  final List<_File> tooLargeFiles = [];
-  final List<_File> rightSizeFiles = [];
+  final List<FileToUpload> tooLargeFiles = [];
+  final List<FileToUpload> rightSizeFiles = [];
   for (final file in files) {
     if ((file.length / (1 << 20)) > store.maxFileUploadSizeMib) {
       tooLargeFiles.add(file);
@@ -959,18 +996,18 @@ Future<void> _uploadFiles({
         listMessage));
   }
 
-  final List<(int, _File)> uploadsInProgress = [];
+  final List<(int, FileToUpload)> uploadsInProgress = [];
   for (final file in rightSizeFiles) {
     final tag = contentController.registerUploadStart(file.filename,
       zulipLocalizations);
     uploadsInProgress.add((tag, file));
   }
-  if (!contentFocusNode.hasFocus) {
+  if (shouldRequestFocus && !contentFocusNode.hasFocus) {
     contentFocusNode.requestFocus();
   }
 
   for (final (tag, file) in uploadsInProgress) {
-    final _File(:content, :length, :filename, :mimeType) = file;
+    final FileToUpload(:content, :length, :filename, :mimeType) = file;
     String? url;
     try {
       final result = await uploadFile(store.connection,
@@ -1009,7 +1046,7 @@ abstract class _AttachUploadsButton extends StatelessWidget {
   ///
   /// To signal exiting the interaction with no files chosen,
   /// return an empty [Iterable] after showing user feedback as appropriate.
-  Future<Iterable<_File>> getFiles(BuildContext context);
+  Future<Iterable<FileToUpload>> getFiles(BuildContext context);
 
   void _handlePress(BuildContext context) async {
     final files = await getFiles(context);
@@ -1023,11 +1060,10 @@ abstract class _AttachUploadsButton extends StatelessWidget {
       return;
     }
 
-    await _uploadFiles(
+    await controller.uploadFiles(
       context: context,
-      contentController: controller.content,
-      contentFocusNode: controller.contentFocusNode,
-      files: files);
+      files: files,
+      shouldRequestFocus: true);
   }
 
   @override
@@ -1043,7 +1079,7 @@ abstract class _AttachUploadsButton extends StatelessWidget {
   }
 }
 
-Future<Iterable<_File>> _getFilePickerFiles(BuildContext context, FileType type) async {
+Future<Iterable<FileToUpload>> _getFilePickerFiles(BuildContext context, FileType type) async {
   FilePickerResult? result;
   try {
     result = await ZulipBinding.instance
@@ -1088,7 +1124,7 @@ Future<Iterable<_File>> _getFilePickerFiles(BuildContext context, FileType type)
       f.path ?? '',
       headerBytes: f.bytes?.take(defaultMagicNumbersMaxLength).toList(),
     );
-    return _File(
+    return FileToUpload(
       content: f.readStream!,
       length: f.size,
       filename: f.name,
@@ -1108,7 +1144,7 @@ class _AttachFileButton extends _AttachUploadsButton {
     zulipLocalizations.composeBoxAttachFilesTooltip;
 
   @override
-  Future<Iterable<_File>> getFiles(BuildContext context) async {
+  Future<Iterable<FileToUpload>> getFiles(BuildContext context) async {
     return _getFilePickerFiles(context, FileType.any);
   }
 }
@@ -1124,7 +1160,7 @@ class _AttachMediaButton extends _AttachUploadsButton {
     zulipLocalizations.composeBoxAttachMediaTooltip;
 
   @override
-  Future<Iterable<_File>> getFiles(BuildContext context) async {
+  Future<Iterable<FileToUpload>> getFiles(BuildContext context) async {
     // TODO(#114): This doesn't give quite the right UI on Android.
     return _getFilePickerFiles(context, FileType.media);
   }
@@ -1141,7 +1177,7 @@ class _AttachFromCameraButton extends _AttachUploadsButton {
       zulipLocalizations.composeBoxAttachFromCameraTooltip;
 
   @override
-  Future<Iterable<_File>> getFiles(BuildContext context) async {
+  Future<Iterable<FileToUpload>> getFiles(BuildContext context) async {
     final zulipLocalizations = ZulipLocalizations.of(context);
     final XFile? result;
     try {
@@ -1192,7 +1228,7 @@ class _AttachFromCameraButton extends _AttachUploadsButton {
     } catch (e) {
       // TODO(log)
     }
-    return [_File(
+    return [FileToUpload(
       content: result.openRead(),
       length: length,
       filename: result.name,
@@ -1550,6 +1586,32 @@ sealed class ComposeBoxController {
     contentFocusNode.requestFocus();
   }
 
+  /// Uploads the provided files, populating the content input with their links.
+  ///
+  /// If any of the files are larger than maximum file size allowed by the
+  /// server, an error dialog is shown mentioning their names and actual
+  /// file sizes.
+  ///
+  /// While uploading, a placeholder link is inserted in the content input and
+  /// if [shouldRequestFocus] is true it will be focused. And then after
+  /// uploading completes successfully the placeholder link will be replaced
+  /// with an actual link.
+  ///
+  /// If there is an error while uploading a file, then an error dialog is
+  /// shown mentioning the corresponding file name.
+  Future<void> uploadFiles({
+    required BuildContext context,
+    required Iterable<FileToUpload> files,
+    required bool shouldRequestFocus,
+  }) async {
+    await _uploadFiles(
+      context: context,
+      contentController: content,
+      contentFocusNode: contentFocusNode,
+      shouldRequestFocus: shouldRequestFocus,
+      files: files);
+  }
+
   @mustCallSuper
   void dispose() {
     content.dispose();
@@ -1659,6 +1721,9 @@ class EditMessageComposeBoxController extends ComposeBoxController {
   String? originalRawContent;
 }
 
+/// A banner to display over or instead of interactive compose-box content.
+///
+/// Must have a [PageRoot] ancestor.
 abstract class _Banner extends StatelessWidget {
   const _Banner();
 
@@ -1675,7 +1740,11 @@ abstract class _Banner extends StatelessWidget {
   ///   https://github.com/zulip/zulip-flutter/pull/1432#discussion_r2023907300
   ///
   /// To control the element's distance from the end edge, override [padEnd].
-  Widget? buildTrailing(BuildContext context);
+  ///
+  /// The passed [BuildContext] will be the result of [PageRoot.contextOf],
+  /// so it's expected to remain mounted until the whole page disappears,
+  /// which may be long after the banner disappears.
+  Widget? buildTrailing(BuildContext pageContext);
 
   /// Whether to apply `end: 8` in [SafeArea.minimum].
   ///
@@ -1694,7 +1763,7 @@ abstract class _Banner extends StatelessWidget {
       color: getLabelColor(designVariables),
     ).merge(weightVariableTextStyle(context, wght: 600));
 
-    final trailing = buildTrailing(context);
+    final trailing = buildTrailing(PageRoot.contextOf(context));
     return DecoratedBox(
       decoration: BoxDecoration(
         color: getBackgroundColor(designVariables)),
@@ -1740,7 +1809,7 @@ class _ErrorBanner extends _Banner {
     designVariables.bannerBgIntDanger;
 
   @override
-  Widget? buildTrailing(context) {
+  Widget? buildTrailing(pageContext) {
     // An "x" button can go here.
     // 24px square with 8px touchable padding in all directions?
     // and `bool get padEnd => false`; see Figma:
@@ -1766,17 +1835,17 @@ class _EditMessageBanner extends _Banner {
   Color getBackgroundColor(DesignVariables designVariables) =>
     designVariables.bannerBgIntInfo;
 
-  void _handleTapSave (BuildContext context) {
-    final store = PerAccountStoreWidget.of(context);
+  void _handleTapSave (BuildContext pageContext) async {
+    final store = PerAccountStoreWidget.of(pageContext);
     final controller = composeBoxState.controller;
     if (controller is! EditMessageComposeBoxController) return; // TODO(log)
-    final zulipLocalizations = ZulipLocalizations.of(context);
+    final zulipLocalizations = ZulipLocalizations.of(pageContext);
 
     if (controller.content.hasValidationErrors.value) {
       final validationErrorMessages =
         controller.content.validationErrors.map((error) =>
           error.message(zulipLocalizations));
-      showErrorDialog(context: context,
+      showErrorDialog(context: pageContext,
         title: zulipLocalizations.errorMessageEditNotSaved,
         message: validationErrorMessages.join('\n\n'));
       return;
@@ -1789,16 +1858,32 @@ class _EditMessageBanner extends _Banner {
       return;
     }
 
-    store.editMessage(
-      messageId: controller.messageId,
-      originalRawContent: originalRawContent,
-      newContent: controller.content.textNormalized);
+    final messageId = controller.messageId;
+    final newContent = controller.content.textNormalized;
     composeBoxState.endEditInteraction();
+
+    try {
+      await store.editMessage(
+        messageId: messageId,
+        originalRawContent: originalRawContent,
+        newContent: newContent);
+    } on ApiRequestException catch (e) {
+      if (!pageContext.mounted) return;
+      final zulipLocalizations = ZulipLocalizations.of(pageContext);
+      final message = switch (e) {
+        ZulipApiException() => zulipLocalizations.errorServerMessage(e.message),
+        _ => e.message,
+      };
+      showErrorDialog(context: pageContext,
+        title: zulipLocalizations.errorMessageEditNotSaved,
+        message: message);
+      return;
+    }
   }
 
   @override
-  Widget buildTrailing(context) {
-    final zulipLocalizations = ZulipLocalizations.of(context);
+  Widget buildTrailing(pageContext) {
+    final zulipLocalizations = ZulipLocalizations.of(pageContext);
     return Row(mainAxisSize: MainAxisSize.min, spacing: 8, children: [
       ZulipWebUiKitButton(label: zulipLocalizations.composeBoxBannerButtonCancel,
         onPressed: composeBoxState.endEditInteraction),
@@ -1806,7 +1891,7 @@ class _EditMessageBanner extends _Banner {
       //   or the original raw content hasn't loaded yet
       ZulipWebUiKitButton(label: zulipLocalizations.composeBoxBannerButtonSave,
         attention: ZulipWebUiKitButtonAttention.high,
-        onPressed: () => _handleTapSave(context)),
+        onPressed: () => _handleTapSave(pageContext)),
     ]);
   }
 }

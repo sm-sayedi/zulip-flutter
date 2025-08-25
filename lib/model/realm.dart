@@ -4,6 +4,7 @@ import '../api/model/events.dart';
 import '../api/model/initial_snapshot.dart';
 import '../api/model/model.dart';
 import 'store.dart';
+import 'user_group.dart';
 
 /// The portion of [PerAccountStore] for realm settings, server settings,
 /// and similar data about the whole realm or server.
@@ -11,7 +12,10 @@ import 'store.dart';
 /// See also:
 ///  * [RealmStoreImpl] for the implementation of this that does the work.
 ///  * [HasRealmStore] for an implementation useful for other substores.
-mixin RealmStore on PerAccountStoreBase {
+mixin RealmStore on PerAccountStoreBase, UserGroupStore {
+  @protected
+  UserGroupStore get userGroupStore;
+
   //|//////////////////////////////////////////////////////////////
   // Server settings, explicitly so named.
 
@@ -42,6 +46,7 @@ mixin RealmStore on PerAccountStoreBase {
     realmMessageContentEditLimitSeconds == null ? null
       : Duration(seconds: realmMessageContentEditLimitSeconds!);
   int? get realmMessageContentEditLimitSeconds;
+  bool get realmEnableReadReceipts;
   bool get realmPresenceDisabled;
   int get realmWaitingPeriodThreshold;
 
@@ -116,7 +121,13 @@ mixin RealmStore on PerAccountStoreBase {
     }
     return topic;
   }
+
+  /// Whether the self-user has the given (group-based) permission.
+  bool selfHasPermissionForGroupSetting(GroupSettingValue value,
+      GroupSettingType type, String name);
 }
+
+enum GroupSettingType { realm, stream, group }
 
 mixin ProxyRealmStore on RealmStore {
   @protected
@@ -141,6 +152,8 @@ mixin ProxyRealmStore on RealmStore {
   @override
   int? get realmMessageContentEditLimitSeconds => realmStore.realmMessageContentEditLimitSeconds;
   @override
+  bool get realmEnableReadReceipts => realmStore.realmEnableReadReceipts;
+  @override
   bool get realmPresenceDisabled => realmStore.realmPresenceDisabled;
   @override
   int get realmWaitingPeriodThreshold => realmStore.realmWaitingPeriodThreshold;
@@ -152,13 +165,16 @@ mixin ProxyRealmStore on RealmStore {
   Map<String, RealmDefaultExternalAccount> get realmDefaultExternalAccounts => realmStore.realmDefaultExternalAccounts;
   @override
   List<CustomProfileField> get customProfileFields => realmStore.customProfileFields;
+  @override
+  bool selfHasPermissionForGroupSetting(GroupSettingValue value, GroupSettingType type, String name) =>
+    realmStore.selfHasPermissionForGroupSetting(value, type, name);
 }
 
 /// A base class for [PerAccountStore] substores that need access to [RealmStore]
 /// as well as to [CorePerAccountStore].
-abstract class HasRealmStore extends PerAccountStoreBase with RealmStore, ProxyRealmStore {
+abstract class HasRealmStore extends HasUserGroupStore with RealmStore, ProxyRealmStore {
   HasRealmStore({required RealmStore realm})
-    : realmStore = realm, super(core: realm.core);
+    : realmStore = realm, super(groups: realm.userGroupStore);
 
   @protected
   @override
@@ -166,11 +182,13 @@ abstract class HasRealmStore extends PerAccountStoreBase with RealmStore, ProxyR
 }
 
 /// The implementation of [RealmStore] that does the work.
-class RealmStoreImpl extends PerAccountStoreBase with RealmStore {
+class RealmStoreImpl extends HasUserGroupStore with RealmStore {
   RealmStoreImpl({
-    required super.core,
+    required super.groups,
     required InitialSnapshot initialSnapshot,
+    required User selfUser,
   }) :
+    _selfUserRole = selfUser.role,
     serverPresencePingIntervalSeconds = initialSnapshot.serverPresencePingIntervalSeconds,
     serverPresenceOfflineThresholdSeconds = initialSnapshot.serverPresenceOfflineThresholdSeconds,
     serverTypingStartedExpiryPeriodMilliseconds = initialSnapshot.serverTypingStartedExpiryPeriodMilliseconds,
@@ -180,12 +198,53 @@ class RealmStoreImpl extends PerAccountStoreBase with RealmStore {
     realmMandatoryTopics = initialSnapshot.realmMandatoryTopics,
     maxFileUploadSizeMib = initialSnapshot.maxFileUploadSizeMib,
     realmMessageContentEditLimitSeconds = initialSnapshot.realmMessageContentEditLimitSeconds,
+    realmEnableReadReceipts = initialSnapshot.realmEnableReadReceipts,
     realmPresenceDisabled = initialSnapshot.realmPresenceDisabled,
     realmWaitingPeriodThreshold = initialSnapshot.realmWaitingPeriodThreshold,
     realmWildcardMentionPolicy = initialSnapshot.realmWildcardMentionPolicy,
     _realmEmptyTopicDisplayName = initialSnapshot.realmEmptyTopicDisplayName,
     realmDefaultExternalAccounts = initialSnapshot.realmDefaultExternalAccounts,
     customProfileFields = _sortCustomProfileFields(initialSnapshot.customProfileFields);
+
+  @override
+  bool selfHasPermissionForGroupSetting(GroupSettingValue value,
+      GroupSettingType type, String name) {
+    // Compare web's settings_data.user_has_permission_for_group_setting.
+    //
+    // In the whole web app, there's just one caller for that function with
+    // a user other than the self user: stream_data.can_post_messages_in_stream,
+    // and only for get_current_user_and_their_bots_with_post_messages_permission,
+    // with only the self-user's own bots as the arguments.
+    // That exists for deciding whether to offer the "Generate email address"
+    // button, and if so then which users to offer in the dropdown;
+    // it's predicting whether /api/get-stream-email-address would succeed.
+    if (_selfUserRole == UserRole.guest) {
+      final config = _groupSettingConfig(type, name);
+      if (!config.allowEveryoneGroup) return false;
+    }
+    return selfInGroupSetting(value);
+  }
+
+  /// The metadata for how to interpret the given group-based permission setting.
+  PermissionSettingsItem _groupSettingConfig(GroupSettingType type, String name) {
+    final supportedSettings = SupportedPermissionSettings.fixture;
+
+    // Compare web's group_permission_settings.get_group_permission_setting_config.
+    final configGroup = switch (type) {
+      GroupSettingType.realm => supportedSettings.realm,
+      GroupSettingType.stream => supportedSettings.stream,
+      GroupSettingType.group => supportedSettings.group,
+    };
+    final config = configGroup[name];
+    return config!; // TODO(log)
+  }
+
+  /// The [User.role] of the self-user.
+  ///
+  /// The main home of this information is [UserStore]: `store.selfUser.role`.
+  /// We need it here for interpreting some permission settings;
+  /// so we denormalize it here to avoid a cycle between substores.
+  UserRole _selfUserRole;
 
   @override
   final int serverPresencePingIntervalSeconds;
@@ -207,6 +266,8 @@ class RealmStoreImpl extends PerAccountStoreBase with RealmStore {
   final int maxFileUploadSizeMib;
   @override
   final int? realmMessageContentEditLimitSeconds;
+  @override
+  final bool realmEnableReadReceipts;
   @override
   final bool realmPresenceDisabled;
   @override
@@ -246,5 +307,12 @@ class RealmStoreImpl extends PerAccountStoreBase with RealmStore {
 
   void handleCustomProfileFieldsEvent(CustomProfileFieldsEvent event) {
     customProfileFields = _sortCustomProfileFields(event.fields);
+  }
+
+  void handleRealmUserUpdateEvent(RealmUserUpdateEvent event) {
+    // Compare [UserStoreImpl.handleRealmUserEvent].
+    if (event.userId == selfUserId) {
+      if (event.role != null) _selfUserRole = event.role!;
+    }
   }
 }

@@ -29,6 +29,7 @@ import 'icons.dart';
 import 'inset_shadow.dart';
 import 'message_list.dart';
 import 'page.dart';
+import 'read_receipts.dart';
 import 'store.dart';
 import 'text.dart';
 import 'theme.dart';
@@ -102,31 +103,221 @@ void _showActionSheet(
     });
 }
 
-/// A header for a bottom sheet with a multiline UI string.
+typedef WidgetBuilderFromTextStyle = Widget Function(TextStyle);
+
+/// A header for a bottom sheet with an optional title and multiline message.
+///
+/// A title, message, or both must be provided.
+///
+/// Provide a title by passing [title] or [buildTitle] (not both).
+/// Provide a message by passing [message] or [buildMessage] (not both).
+/// The "build" params support richer content, such as [TextWithLink],
+/// and the callback is passed a [TextStyle] which is the base style.
 ///
 /// Assumes 8px padding below the top of the bottom sheet.
 ///
-/// Figma:
+/// Figma; just message no title:
 ///   https://www.figma.com/design/1JTNtYo9memgW7vV6d0ygq/Zulip-Mobile?node-id=3481-26993&m=dev
-class BottomSheetHeaderPlainText extends StatelessWidget {
-  const BottomSheetHeaderPlainText({super.key, required this.text});
+///
+/// Figma; title and message:
+///   https://www.figma.com/design/1JTNtYo9memgW7vV6d0ygq/Zulip-Mobile?node-id=6326-96125&m=dev
+///   https://www.figma.com/design/1JTNtYo9memgW7vV6d0ygq/Zulip-Mobile?node-id=11367-20898&m=dev
+/// The latter example (read receipts) has more horizontal and bottom padding;
+/// that looks like an accident that we don't need to follow.
+/// It also colors the message text more opaquely…that difference might be
+/// intentional, but Vlad's time is limited and I prefer consistency.
+class BottomSheetHeader extends StatelessWidget {
+  const BottomSheetHeader({
+    super.key,
+    this.title,
+    this.buildTitle,
+    this.message,
+    this.buildMessage,
+  }) : assert(message == null || buildMessage == null),
+       assert(title == null || buildTitle == null),
+       assert((message != null || buildMessage != null)
+              || (title != null || buildTitle != null));
 
-  final String text;
+  final String? title;
+  final Widget Function(TextStyle)? buildTitle;
+  final String? message;
+  final Widget Function(TextStyle)? buildMessage;
 
   @override
   Widget build(BuildContext context) {
     final designVariables = DesignVariables.of(context);
 
+    final baseTitleStyle = TextStyle(
+      fontSize: 20,
+      height: 20 / 20,
+      color: designVariables.title,
+    ).merge(weightVariableTextStyle(context, wght: 600));
+
+    final effectiveTitle = switch ((buildTitle, title)) {
+      (final build?, null) => build(baseTitleStyle),
+      (null,  final data?) => Text(style: baseTitleStyle, data),
+      _                    => null,
+    };
+
+    final baseMessageStyle = TextStyle(
+      color: designVariables.labelTime,
+      fontSize: 17,
+      height: 22 / 17);
+
+    final effectiveMessage = switch ((buildMessage, message)) {
+      (final build?, null) => build(baseMessageStyle),
+      (null,  final data?) => Text(style: baseMessageStyle, data),
+      _                    => null,
+    };
+
     return Padding(
       padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
-      child: SizedBox(
-        width: double.infinity,
-        child: Text(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 8,
+        children: [?effectiveTitle, ?effectiveMessage]));
+  }
+}
+
+/// A placeholder for when a bottom sheet has no content to show.
+///
+/// Pass [message] for a "no-content-here" message,
+/// or pass true for [loading] if the content hasn't finished loading yet,
+/// but don't pass both.
+///
+/// Show this below a [BottomSheetHeader] if present.
+///
+/// See also:
+///  * [PageBodyEmptyContentPlaceholder], for a similar element to use in
+///    pages on the home screen.
+// TODO(design) we don't yet have a design for this;
+//   it was ad-hoc and modeled on [PageBodyEmptyContentPlaceholder].
+class BottomSheetEmptyContentPlaceholder extends StatelessWidget {
+  const BottomSheetEmptyContentPlaceholder({
+    super.key,
+    this.message,
+    this.loading = false,
+  }) : assert((message != null) ^ loading);
+
+  final String? message;
+  final bool loading;
+
+  @override
+  Widget build(BuildContext context) {
+    final designVariables = DesignVariables.of(context);
+
+    final child = loading
+      ? CircularProgressIndicator()
+      : Text(
+          textAlign: TextAlign.center,
           style: TextStyle(
-            color: designVariables.labelTime,
+            color: designVariables.labelSearchPrompt,
             fontSize: 17,
-            height: 22 / 17),
-          text)));
+            height: 23 / 17,
+          ).merge(weightVariableTextStyle(context, wght: 500)),
+          message!);
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(24, 48, 24, 16),
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: child));
+  }
+}
+
+/// A bottom sheet that resizes, scrolls, and dismisses in response to dragging.
+///
+/// [header] is assumed to occupy the full width its parent allows.
+/// (This is important for the clipping/shadow effect when [contentSliver]
+/// scrolls under the header.)
+///
+/// The sheet's initial height and minimum height before dismissing
+/// are set proportionally to the screen's height.
+/// The screen's height is read from the parent's max-height constraint,
+/// so the caller should not introduce widgets that interfere with that.
+/// (Non-layout wrapper widgets such as [InheritedWidget]s are OK.)
+///
+/// The sheet's dismissal works like this:
+/// - A "Close" button is offered.
+/// - A drag-down or fling on the header or the [contentSliver]
+///   causes those areas to shrink past a threshold at which the sheet
+///   decides to dismiss.
+/// - The [enableDrag] param of upstream's [showModalBottomSheet]
+///   only seems to affect gesture handling on the Close button and its padding
+///   (which are not part of the resizable/scrollable area):
+///   - When true, the Close button responds to a downward fling by
+///     sliding the sheet downward and dismissing it
+///     (i.e. not by the usual behavior where the header- and-content height
+///     shrinks past a threshold, causing dismissal).
+///   - When false, the Close button doesn't respond to a downward fling.
+class DraggableScrollableModalBottomSheet extends StatelessWidget {
+  const DraggableScrollableModalBottomSheet({
+    super.key,
+    required this.header,
+    required this.contentSliver,
+  });
+
+  final Widget header;
+  final Widget contentSliver;
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      expand: false,
+      builder: (context, controller) {
+        final backgroundColor = Theme.of(context).bottomSheetTheme.backgroundColor!;
+
+        // The "inset shadow" effect in Figma is a bit awkwardly
+        // implemented here, and there might be a better factoring:
+        // 1. This effect leans on the abstraction that [contentSliver]
+        //    is simply a scrollable area in its own viewport.
+        //    We'd normally just wrap that viewport in [InsetShadowBox].
+        // 2. Really, though, the scrollable includes the header,
+        //    pinned to the viewport top. We do this to support resizing
+        //    (and dismiss-on-min-height) on gestures in the header, too,
+        //    uniformly with the content.
+        // 3. So for the top shadow, we tack a shadow gradient onto the header,
+        //    exploiting the header's pinning behavior to keep it fixed.
+        // 3. For the bottom, I haven't found a nice sliver-based implementation
+        //    that supports pinning a shadow overlay at the viewport bottom.
+        //    So for the bottom we use [InsetShadowBox] around the viewport,
+        //    with just `bottom:` and no `top:`.
+
+        final headerWithShadow = Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ColoredBox(
+              color: backgroundColor,
+              child: header),
+            SizedBox(height: 8, width: double.infinity,
+              child: DecoratedBox(decoration: fadeToTransparencyDecoration(
+                FadeToTransparencyDirection.down, backgroundColor))),
+          ]);
+
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: InsetShadowBox(
+                bottom: 8,
+                color: backgroundColor,
+                child: CustomScrollView(
+                  // The iOS default "bouncing" effect would look uncoordinated
+                  // in the common case where overscroll co-occurs with
+                  // shrinking the sheet past the threshold where it dismisses.
+                  physics: ClampingScrollPhysics(),
+                  controller: controller,
+                  slivers: [
+                    PinnedHeaderSliver(child: headerWithShadow),
+                    SliverPadding(
+                      padding: EdgeInsets.only(bottom: 8),
+                      sliver: contentSliver),
+                  ]))),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: const BottomSheetDismissButton(style: BottomSheetDismissButtonStyle.close))
+          ]);
+    });
   }
 }
 
@@ -239,22 +430,34 @@ enum BottomSheetDismissButtonStyle {
 /// Show a sheet of actions you can take on a channel.
 ///
 /// Needs a [PageRoot] ancestor.
+/// May or may not have a [MessageListPage] ancestor;
+/// some callers are on that page and some aren't.
 void showChannelActionSheet(BuildContext context, {
   required int channelId,
+  bool showTopicListButton = true,
 }) {
   final pageContext = PageRoot.contextOf(context);
   final store = PerAccountStoreWidget.of(pageContext);
+  final messageListPageState = MessageListPage.maybeAncestorOf(pageContext);
+
+  final messageListPageNarrow = messageListPageState?.narrow;
+  final isOnChannelFeed = messageListPageNarrow is ChannelNarrow
+    && messageListPageNarrow.streamId == channelId;
 
   final unreadCount = store.unreads.countInChannelNarrow(channelId);
-  final isSubscribed = store.subscriptions[channelId] != null;
+  final channel = store.streams[channelId];
+  final isSubscribed = channel is Subscription;
   final buttonSections = [
-    if (!isSubscribed)
-      // TODO(#1786) check group-based can-subscribe permission
+    if (!isSubscribed
+        && channel != null && store.selfHasContentAccess(channel))
       [SubscribeButton(pageContext: pageContext, channelId: channelId)],
     [
       if (unreadCount > 0)
         MarkChannelAsReadButton(pageContext: pageContext, channelId: channelId),
-      TopicListButton(pageContext: pageContext, channelId: channelId),
+      if (showTopicListButton)
+        TopicListButton(pageContext: pageContext, channelId: channelId),
+      if (!isOnChannelFeed)
+        ChannelFeedButton(pageContext: pageContext, channelId: channelId),
       CopyChannelLinkButton(channelId: channelId, pageContext: pageContext)
     ],
     if (isSubscribed)
@@ -355,6 +558,30 @@ class TopicListButton extends ActionSheetMenuItemButton {
   }
 }
 
+class ChannelFeedButton extends ActionSheetMenuItemButton {
+  const ChannelFeedButton({
+    super.key,
+    required this.channelId,
+    required super.pageContext,
+  });
+
+  final int channelId;
+
+  @override
+  IconData get icon => ZulipIcons.message_feed;
+
+  @override
+  String label(ZulipLocalizations zulipLocalizations) {
+    return zulipLocalizations.actionSheetOptionChannelFeed;
+  }
+
+  @override
+  void onPressed() {
+    Navigator.push(pageContext,
+      MessageListPage.buildRoute(context: pageContext, narrow: ChannelNarrow(channelId)));
+  }
+}
+
 class CopyChannelLinkButton extends ActionSheetMenuItemButton {
   const CopyChannelLinkButton({
     super.key,
@@ -374,11 +601,11 @@ class CopyChannelLinkButton extends ActionSheetMenuItemButton {
 
   @override
   void onPressed() async {
-    final localizations = ZulipLocalizations.of(pageContext);
+    final zulipLocalizations = ZulipLocalizations.of(pageContext);
     final store = PerAccountStoreWidget.of(pageContext);
 
     PlatformActions.copyWithPopup(context: pageContext,
-      successContent: Text(localizations.successChannelLinkCopied),
+      successContent: Text(zulipLocalizations.successChannelLinkCopied),
       data: ClipboardData(text: narrowLink(store, ChannelNarrow(channelId)).toString()));
   }
 }
@@ -785,11 +1012,11 @@ class CopyTopicLinkButton extends ActionSheetMenuItemButton {
   }
 
   @override void onPressed() async {
-    final localizations = ZulipLocalizations.of(pageContext);
+    final zulipLocalizations = ZulipLocalizations.of(pageContext);
     final store = PerAccountStoreWidget.of(pageContext);
 
     PlatformActions.copyWithPopup(context: pageContext,
-      successContent: Text(localizations.successTopicLinkCopied),
+      successContent: Text(zulipLocalizations.successTopicLinkCopied),
       data: ClipboardData(text: narrowLink(store, narrow).toString()));
   }
 }
@@ -805,6 +1032,8 @@ void showMessageActionSheet({required BuildContext context, required Message mes
 
   final reactions = message.reactions;
   final hasReactions = reactions != null && reactions.total > 0;
+
+  final readReceiptsEnabled = store.realmEnableReadReceipts;
 
   // The UI that's conditioned on this won't live-update during this appearance
   // of the action sheet (we avoid calling composeBoxControllerOf in a build
@@ -825,6 +1054,8 @@ void showMessageActionSheet({required BuildContext context, required Message mes
       ReactionButtons(message: message, pageContext: pageContext),
     if (hasReactions)
       ViewReactionsButton(message: message, pageContext: pageContext),
+    if (readReceiptsEnabled)
+      ViewReadReceiptsButton(message: message, pageContext: pageContext),
     StarButton(message: message, pageContext: pageContext),
     if (isComposeBoxOffered)
       QuoteAndReplyButton(message: message, pageContext: pageContext),
@@ -1071,6 +1302,21 @@ class ViewReactionsButton extends MessageActionSheetMenuItemButton {
 
   @override void onPressed() {
     showViewReactionsSheet(pageContext, messageId: message.id);
+  }
+}
+
+class ViewReadReceiptsButton extends MessageActionSheetMenuItemButton {
+  ViewReadReceiptsButton({super.key, required super.message, required super.pageContext});
+
+  @override IconData get icon => ZulipIcons.check_check;
+
+  @override
+  String label(ZulipLocalizations zulipLocalizations) {
+    return zulipLocalizations.actionSheetOptionViewReadReceipts;
+  }
+
+  @override void onPressed() {
+    showReadReceiptsSheet(pageContext, messageId: message.id);
   }
 }
 

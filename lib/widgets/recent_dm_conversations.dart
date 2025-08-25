@@ -14,8 +14,26 @@ import 'theme.dart';
 import 'unread_count_badge.dart';
 import 'user.dart';
 
+typedef OnDmSelectCallback = void Function(DmNarrow narrow);
+
 class RecentDmConversationsPageBody extends StatefulWidget {
-  const RecentDmConversationsPageBody({super.key});
+  const RecentDmConversationsPageBody({
+    super.key,
+    this.hideDmsIfUserCantPost = false,
+    this.onDmSelect,
+  });
+
+  // TODO refactor this widget to avoid reuse of the whole page,
+  //   avoiding the need for these flags, callback, and the below
+  //   handling of safe-area at this level of abstraction.
+  //   See discussion:
+  //     https://github.com/zulip/zulip-flutter/pull/1774#discussion_r2249032503
+  final bool hideDmsIfUserCantPost;
+
+  /// Callback to invoke when the user selects a DM conversation from the list.
+  ///
+  /// If null, the default behavior is to navigate to the DM conversation.
+  final OnDmSelectCallback? onDmSelect;
 
   @override
   State<RecentDmConversationsPageBody> createState() => _RecentDmConversationsPageBodyState();
@@ -50,11 +68,38 @@ class _RecentDmConversationsPageBodyState extends State<RecentDmConversationsPag
     });
   }
 
+  void _handleDmSelect(DmNarrow narrow) {
+    if (widget.onDmSelect case final onDmSelect?) {
+      onDmSelect(narrow);
+    } else {
+      Navigator.push(context,
+        MessageListPage.buildRoute(context: context,
+          narrow: narrow));
+    }
+  }
+
+  void _handleDmSelectForNewDms(DmNarrow narrow) {
+    if (widget.onDmSelect case final onDmSelect?) {
+      // Pop the new-DMs action sheet.
+      Navigator.pop(context);
+      onDmSelect(narrow);
+    } else {
+      Navigator.pushReplacement(context,
+        MessageListPage.buildRoute(context: context,
+          narrow: narrow));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final store = PerAccountStoreWidget.of(context);
     final zulipLocalizations = ZulipLocalizations.of(context);
     final sorted = model!.sorted;
+
+    // This value will be zero when this page is used in the context of
+    // home-page, see comment on `bottom: false` arg in use of `SafeArea`
+    // below.
+    final bottomInsets = MediaQuery.paddingOf(context).bottom;
 
     return Stack(
       alignment: Alignment.bottomCenter,
@@ -64,9 +109,21 @@ class _RecentDmConversationsPageBodyState extends State<RecentDmConversationsPag
           PageBodyEmptyContentPlaceholder(
             message: zulipLocalizations.recentDmConversationsEmptyPlaceholder)
         else
-          SafeArea( // horizontal insets
+          SafeArea(
+            // Don't pad the bottom here; we want the list content to do that.
+            //
+            // When this page is used in the context of the home page, this
+            // param and the below use of `MediaQuery.paddingOf(context).bottom`
+            // via `bottomInsets` would be noop, because
+            // `Scaffold.bottomNavigationBar` in the home page handles that for
+            // us. But this page is also used for share-to-zulip page, so we
+            // need this to be handled here.
+            //
+            // Other *PageBody widgets don't handle this because they aren't
+            // (re-)used outside the context of the home page.
+            bottom: false,
             child: ListView.builder(
-              padding: EdgeInsets.only(bottom: 90),
+              padding: EdgeInsets.only(bottom: bottomInsets + 90),
               itemCount: sorted.length,
               itemBuilder: (context, index) {
                 final narrow = sorted[index];
@@ -76,13 +133,23 @@ class _RecentDmConversationsPageBodyState extends State<RecentDmConversationsPag
                   //   for these conversations we're filtering out?
                   return SizedBox.shrink();
                 }
+                if (widget.hideDmsIfUserCantPost) {
+                  // TODO(#791) handle other cases where user can't post
+                  final hasDeactivatedUser =
+                    narrow.otherRecipientIds.any(
+                      (id) => !(store.getUser(id)?.isActive ?? true));
+                  if (hasDeactivatedUser) {
+                    return SizedBox.shrink();
+                  }
+                }
                 return RecentDmConversationsItem(
                   narrow: narrow,
-                  unreadCount: unreadsModel!.countInDmNarrow(narrow));
+                  unreadCount: unreadsModel!.countInDmNarrow(narrow),
+                  onDmSelect: _handleDmSelect);
               })),
         Positioned(
-          bottom: 21,
-          child: _NewDmButton()),
+          bottom: bottomInsets + 21,
+          child: _NewDmButton(onDmSelect: _handleDmSelectForNewDms)),
       ]);
   }
 }
@@ -92,10 +159,12 @@ class RecentDmConversationsItem extends StatelessWidget {
     super.key,
     required this.narrow,
     required this.unreadCount,
+    required this.onDmSelect,
   });
 
   final DmNarrow narrow;
   final int unreadCount;
+  final OnDmSelectCallback onDmSelect;
 
   static const double _avatarSize = 32;
 
@@ -138,10 +207,7 @@ class RecentDmConversationsItem extends StatelessWidget {
     return Material(
       color: backgroundColor,
       child: InkWell(
-        onTap: () {
-          Navigator.push(context,
-            MessageListPage.buildRoute(context: context, narrow: narrow));
-        },
+        onTap: () => onDmSelect(narrow),
         child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 48),
           child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
             Padding(padding: const EdgeInsetsDirectional.fromSTEB(12, 8, 0, 8),
@@ -175,7 +241,11 @@ class RecentDmConversationsItem extends StatelessWidget {
 }
 
 class _NewDmButton extends StatefulWidget {
-  const _NewDmButton();
+  const _NewDmButton({
+    required this.onDmSelect,
+  });
+
+  final OnDmSelectCallback onDmSelect;
 
   @override
   State<_NewDmButton> createState() => _NewDmButtonState();
@@ -197,7 +267,7 @@ class _NewDmButtonState extends State<_NewDmButton> {
       : designVariables.fabLabel;
 
     return GestureDetector(
-      onTap: () => showNewDmSheet(context),
+      onTap: () => showNewDmSheet(context, widget.onDmSelect),
       onTapDown: (_) => setState(() => _pressed = true),
       onTapUp: (_) => setState(() => _pressed = false),
       onTapCancel: () => setState(() => _pressed = false),

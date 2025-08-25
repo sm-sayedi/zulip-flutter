@@ -481,14 +481,32 @@ class PerAccountStore extends PerAccountStoreBase with
       accountId: accountId,
       selfUserId: account.userId,
     );
-    final realm = RealmStoreImpl(core: core, initialSnapshot: initialSnapshot);
-    final users = UserStoreImpl(realm: realm, initialSnapshot: initialSnapshot);
+
+    final userMap = UserStoreImpl.userMapFromInitialSnapshot(initialSnapshot);
+    final selfUser = userMap[core.selfUserId];
+    if (selfUser == null) {
+      final zulipLocalizations = GlobalLocalizations.zulipLocalizations;
+      reportErrorToUserModally(
+        zulipLocalizations.errorCouldNotConnectTitle,
+        message: zulipLocalizations.errorMalformedResponseWithCause(200,
+          // skip-i18n: This would be an unlikely bug (in the server?).  We're
+          //   showing the user these details at all only because it would be a
+          //   very nasty bug (so, important to resolve ASAP) if it ever did happen.
+          'self-user missing from user list'));
+      throw Exception("bad initial snapshot: self-user missing from user list");
+    }
+
+    final groups = UserGroupStoreImpl(core: core,
+      groups: initialSnapshot.realmUserGroups);
+    final realm = RealmStoreImpl(groups: groups, initialSnapshot: initialSnapshot,
+      selfUser: selfUser);
+    final users = UserStoreImpl(realm: realm, initialSnapshot: initialSnapshot,
+      userMap: userMap);
     final channels = ChannelStoreImpl(users: users,
       initialSnapshot: initialSnapshot);
     return PerAccountStore._(
       core: core,
-      groups: UserGroupStoreImpl(core: core,
-        groups: initialSnapshot.realmUserGroups),
+      groups: groups,
       realm: realm,
       emoji: EmojiStoreImpl(core: core,
         allRealmEmoji: initialSnapshot.realmEmoji),
@@ -741,6 +759,8 @@ class PerAccountStore extends PerAccountStoreBase with
 
       case RealmUserUpdateEvent():
         assert(debugLog("server event: realm_user/update"));
+        _groups.handleRealmUserUpdateEvent(event);
+        _realm.handleRealmUserUpdateEvent(event);
         _users.handleRealmUserEvent(event);
         autocompleteViewManager.handleRealmUserUpdateEvent(event);
         notifyListeners();
@@ -814,7 +834,8 @@ class PerAccountStore extends PerAccountStoreBase with
         typingStatus.handleTypingEvent(event);
 
       case PresenceEvent():
-        // TODO handle
+        assert(debugLog("server event: presence ${event.userId}"));
+        // TODO(#1618) handle
         break;
 
       case ReactionEvent():
@@ -1443,10 +1464,10 @@ class UpdateMachine {
   }
 
   void _reportToUserErrorConnectingToServer(Object error) {
-    final localizations = GlobalLocalizations.zulipLocalizations;
+    final zulipLocalizations = GlobalLocalizations.zulipLocalizations;
     reportErrorToUserBriefly(
-      localizations.errorConnectingToServerShort,
-      details: localizations.errorConnectingToServerDetails(
+      zulipLocalizations.errorConnectingToServerShort,
+      details: zulipLocalizations.errorConnectingToServerDetails(
         store.realmUrl.toString(), error.toString()));
   }
 

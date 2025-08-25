@@ -8,6 +8,24 @@ part of 'model.dart';
 // JsonSerializableGenerator
 // **************************************************************************
 
+GroupSettingValueNameless _$GroupSettingValueNamelessFromJson(
+  Map<String, dynamic> json,
+) => GroupSettingValueNameless(
+  directMembers: (json['direct_members'] as List<dynamic>)
+      .map((e) => (e as num).toInt())
+      .toList(),
+  directSubgroups: (json['direct_subgroups'] as List<dynamic>)
+      .map((e) => (e as num).toInt())
+      .toList(),
+);
+
+Map<String, dynamic> _$GroupSettingValueNamelessToJson(
+  GroupSettingValueNameless instance,
+) => <String, dynamic>{
+  'direct_members': instance.directMembers,
+  'direct_subgroups': instance.directSubgroups,
+};
+
 CustomProfileField _$CustomProfileFieldFromJson(Map<String, dynamic> json) =>
     CustomProfileField(
       id: (json['id'] as num).toInt(),
@@ -96,6 +114,12 @@ Map<String, dynamic> _$RealmEmojiItemToJson(RealmEmojiItem instance) =>
 
 UserGroup _$UserGroupFromJson(Map<String, dynamic> json) => UserGroup(
   id: (json['id'] as num).toInt(),
+  members: (json['members'] as List<dynamic>)
+      .map((e) => (e as num).toInt())
+      .toSet(),
+  directSubgroupIds: (json['direct_subgroup_ids'] as List<dynamic>)
+      .map((e) => (e as num).toInt())
+      .toSet(),
   name: json['name'] as String,
   description: json['description'] as String,
   isSystemGroup: json['is_system_group'] as bool,
@@ -104,6 +128,8 @@ UserGroup _$UserGroupFromJson(Map<String, dynamic> json) => UserGroup(
 
 Map<String, dynamic> _$UserGroupToJson(UserGroup instance) => <String, dynamic>{
   'id': instance.id,
+  'members': instance.members.toList(),
+  'direct_subgroup_ids': instance.directSubgroupIds.toList(),
   'name': instance.name,
   'description': instance.description,
   'is_system_group': instance.isSystemGroup,
@@ -117,7 +143,6 @@ User _$UserFromJson(Map<String, dynamic> json) => User(
   fullName: json['full_name'] as String,
   dateJoined: json['date_joined'] as String,
   isActive: json['is_active'] as bool,
-  isBillingAdmin: json['is_billing_admin'] as bool?,
   isBot: json['is_bot'] as bool,
   botType: (json['bot_type'] as num?)?.toInt(),
   botOwnerId: (json['bot_owner_id'] as num?)?.toInt(),
@@ -137,7 +162,7 @@ User _$UserFromJson(Map<String, dynamic> json) => User(
               ProfileFieldUserData.fromJson(e as Map<String, dynamic>),
             ),
           ),
-  isSystemBot: User._readIsSystemBot(json, 'is_system_bot') as bool,
+  isSystemBot: json['is_system_bot'] as bool? ?? false,
 );
 
 Map<String, dynamic> _$UserToJson(User instance) => <String, dynamic>{
@@ -147,7 +172,6 @@ Map<String, dynamic> _$UserToJson(User instance) => <String, dynamic>{
   'full_name': instance.fullName,
   'date_joined': instance.dateJoined,
   'is_active': instance.isActive,
-  'is_billing_admin': instance.isBillingAdmin,
   'is_bot': instance.isBot,
   'bot_type': instance.botType,
   'bot_owner_id': instance.botOwnerId,
@@ -226,6 +250,12 @@ ZulipStream _$ZulipStreamFromJson(Map<String, dynamic> json) => ZulipStream(
     _$ChannelPostPolicyEnumMap,
     json['stream_post_policy'],
   ),
+  canAddSubscribersGroup: json['can_add_subscribers_group'] == null
+      ? null
+      : GroupSettingValue.fromJson(json['can_add_subscribers_group']),
+  canSubscribeGroup: json['can_subscribe_group'] == null
+      ? null
+      : GroupSettingValue.fromJson(json['can_subscribe_group']),
   streamWeeklyTraffic: (json['stream_weekly_traffic'] as num?)?.toInt(),
 );
 
@@ -242,6 +272,8 @@ Map<String, dynamic> _$ZulipStreamToJson(ZulipStream instance) =>
       'history_public_to_subscribers': instance.historyPublicToSubscribers,
       'message_retention_days': instance.messageRetentionDays,
       'stream_post_policy': instance.channelPostPolicy,
+      'can_add_subscribers_group': instance.canAddSubscribersGroup,
+      'can_subscribe_group': instance.canSubscribeGroup,
       'stream_weekly_traffic': instance.streamWeeklyTraffic,
     };
 
@@ -268,6 +300,12 @@ Subscription _$SubscriptionFromJson(Map<String, dynamic> json) => Subscription(
     _$ChannelPostPolicyEnumMap,
     json['stream_post_policy'],
   ),
+  canAddSubscribersGroup: json['can_add_subscribers_group'] == null
+      ? null
+      : GroupSettingValue.fromJson(json['can_add_subscribers_group']),
+  canSubscribeGroup: json['can_subscribe_group'] == null
+      ? null
+      : GroupSettingValue.fromJson(json['can_subscribe_group']),
   streamWeeklyTraffic: (json['stream_weekly_traffic'] as num?)?.toInt(),
   desktopNotifications: json['desktop_notifications'] as bool?,
   emailNotifications: json['email_notifications'] as bool?,
@@ -292,6 +330,8 @@ Map<String, dynamic> _$SubscriptionToJson(Subscription instance) =>
       'history_public_to_subscribers': instance.historyPublicToSubscribers,
       'message_retention_days': instance.messageRetentionDays,
       'stream_post_policy': instance.channelPostPolicy,
+      'can_add_subscribers_group': instance.canAddSubscribersGroup,
+      'can_subscribe_group': instance.canSubscribeGroup,
       'stream_weekly_traffic': instance.streamWeeklyTraffic,
       'desktop_notifications': instance.desktopNotifications,
       'email_notifications': instance.emailNotifications,
@@ -451,6 +491,8 @@ const _$ChannelPropertyNameEnumMap = {
   ChannelPropertyName.inviteOnly: 'invite_only',
   ChannelPropertyName.messageRetentionDays: 'message_retention_days',
   ChannelPropertyName.channelPostPolicy: 'stream_post_policy',
+  ChannelPropertyName.canAddSubscribersGroup: 'can_add_subscribers_group',
+  ChannelPropertyName.canSubscribeGroup: 'can_subscribe_group',
   ChannelPropertyName.streamWeeklyTraffic: 'stream_weekly_traffic',
 };
 

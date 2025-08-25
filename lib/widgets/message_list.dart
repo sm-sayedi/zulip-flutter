@@ -133,7 +133,7 @@ class MessageListTheme extends ThemeExtension<MessageListTheme> {
 /// The interface for the state of a [MessageListPage].
 ///
 /// To obtain one of these, see [MessageListPage.ancestorOf].
-abstract class MessageListPageState {
+abstract class MessageListPageState extends State<MessageListPage> {
   /// The narrow for this page's message list.
   Narrow get narrow;
 
@@ -171,11 +171,20 @@ class MessageListPage extends StatefulWidget {
     this.initAnchorMessageId,
   });
 
-  static AccountRoute<void> buildRoute({int? accountId, BuildContext? context,
-      required Narrow narrow, int? initAnchorMessageId}) {
-    return MaterialAccountWidgetRoute(accountId: accountId, context: context,
+  static AccountRoute<void> buildRoute({
+    int? accountId,
+    BuildContext? context,
+    GlobalKey<MessageListPageState>? key,
+    required Narrow narrow,
+    int? initAnchorMessageId,
+  }) {
+    return MaterialAccountWidgetRoute(
+      accountId: accountId,
+      context: context,
       page: MessageListPage(
-        initNarrow: narrow, initAnchorMessageId: initAnchorMessageId));
+        key: key,
+        initNarrow: narrow,
+        initAnchorMessageId: initAnchorMessageId));
   }
 
   /// The "revealed" state of a message from a muted sender,
@@ -197,12 +206,28 @@ class MessageListPage extends StatefulWidget {
   ///
   /// Uses the inefficient [BuildContext.findAncestorStateOfType];
   /// don't call this in a build method.
-  // If we do find ourselves wanting this in a build method, it won't be hard
-  // to enable that: we'd just need to add an [InheritedWidget] here.
+  ///
+  /// See also:
+  ///  * [maybeAncestorOf], which returns null instead of throwing
+  ///    when an ancestor [MessageListPageState] is not found.
   static MessageListPageState ancestorOf(BuildContext context) {
-    final state = context.findAncestorStateOfType<_MessageListPageState>();
+    final state = maybeAncestorOf(context);
     assert(state != null, 'No MessageListPage ancestor');
     return state!;
+  }
+
+  /// The [MessageListPageState] above this context in the tree, if any.
+  ///
+  /// Uses the inefficient [BuildContext.findAncestorStateOfType];
+  /// don't call this in a build method.
+  ///
+  /// See also:
+  ///  * [ancestorOf], which throws instead of returning null
+  ///    when an ancestor [MessageListPageState] is not found.
+  // If we do find ourselves wanting this in a build method, it won't be hard
+  // to enable that: we'd just need to add an [InheritedWidget] here.
+  static MessageListPageState? maybeAncestorOf(BuildContext context) {
+    return context.findAncestorStateOfType<_MessageListPageState>();
   }
 
   final Narrow initNarrow;

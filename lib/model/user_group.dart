@@ -18,6 +18,10 @@ mixin UserGroupStore on PerAccountStoreBase {
   ///
   /// Consider using [activeGroups] instead.
   Iterable<UserGroup> get allGroups;
+
+  /// Whether the self-user is a (transitive) member of the given group,
+  /// a group-setting value.
+  bool selfInGroupSetting(GroupSettingValue value);
 }
 
 mixin ProxyUserGroupStore on UserGroupStore {
@@ -30,6 +34,18 @@ mixin ProxyUserGroupStore on UserGroupStore {
   Iterable<UserGroup> get activeGroups => userGroupStore.activeGroups;
   @override
   Iterable<UserGroup> get allGroups => userGroupStore.allGroups;
+  @override
+  bool selfInGroupSetting(GroupSettingValue value)
+    => userGroupStore.selfInGroupSetting(value);
+}
+
+abstract class HasUserGroupStore extends PerAccountStoreBase with UserGroupStore, ProxyUserGroupStore {
+  HasUserGroupStore({required UserGroupStore groups})
+    : userGroupStore = groups, super(core: groups.core);
+
+  @protected
+  @override
+  final UserGroupStore userGroupStore;
 }
 
 /// The implementation of [UserGroupStore] that does the work.
@@ -55,7 +71,33 @@ class UserGroupStoreImpl extends PerAccountStoreBase with UserGroupStore {
     return _groups.values;
   }
 
+  @override
+  bool selfInGroupSetting(GroupSettingValue value) {
+    return switch (value) {
+      GroupSettingValueNamed() =>
+        _selfInGroup(value.groupId),
+      GroupSettingValueNameless() =>
+        value.directMembers.contains(selfUserId)
+          || value.directSubgroups.any(_selfInGroup),
+    };
+  }
+
+  bool _selfInGroup(int groupId) {
+    final group = _groups[groupId];
+    if (group == null) return false; // TODO(log); should know all groups
+    // TODO(perf), TODO(#814): memoize which groups the self-user is in,
+    //   to save doing this depth-first search on each permission check
+    return group.members.contains(selfUserId)
+      || group.directSubgroupIds.any(_selfInGroup);
+  }
+
   final Map<int, UserGroup> _groups;
+
+  UserGroup? _expectGroup(int groupId) {
+    final group = _groups[groupId];
+    // TODO(log) if group not found
+    return group;
+  }
 
   void handleUserGroupEvent(UserGroupEvent event) {
     switch (event) {
@@ -66,14 +108,40 @@ class UserGroupStoreImpl extends PerAccountStoreBase with UserGroupStore {
         _groups.remove(event.groupId);
 
       case UserGroupUpdateEvent():
-        final group = _groups[event.groupId];
-        if (group == null) {
-          return; // TODO log
-        }
+        final group = _expectGroup(event.groupId);
+        if (group == null) return;
         final data = event.data;
         if (data.name != null)        group.name        = data.name!;
         if (data.description != null) group.description = data.description!;
         if (data.deactivated != null) group.deactivated = data.deactivated!;
+
+      case UserGroupAddMembersEvent():
+        final group = _expectGroup(event.groupId);
+        if (group == null) return;
+        group.members.addAll(event.userIds);
+
+      case UserGroupRemoveMembersEvent():
+        final group = _expectGroup(event.groupId);
+        if (group == null) return;
+        group.members.removeAll(event.userIds);
+
+      case UserGroupAddSubgroupsEvent():
+        final group = _expectGroup(event.groupId);
+        if (group == null) return;
+        group.directSubgroupIds.addAll(event.directSubgroupIds);
+
+      case UserGroupRemoveSubgroupsEvent():
+        final group = _expectGroup(event.groupId);
+        if (group == null) return;
+        group.directSubgroupIds.removeAll(event.directSubgroupIds);
+    }
+  }
+
+  void handleRealmUserUpdateEvent(RealmUserUpdateEvent event) {
+    if (event.isActive == false) {
+      for (final group in _groups.values) {
+        group.members.remove(event.userId);
+      }
     }
   }
 }

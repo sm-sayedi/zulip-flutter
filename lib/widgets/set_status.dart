@@ -8,7 +8,6 @@ import '../basic.dart';
 import '../generated/l10n/zulip_localizations.dart';
 import '../log.dart';
 import 'app_bar.dart';
-import 'color.dart';
 import 'emoji_reaction.dart';
 import 'icons.dart';
 import 'inset_shadow.dart';
@@ -85,16 +84,16 @@ class _SetStatusPageState extends State<SetStatusPage> {
 
   List<UserStatus> statusSuggestions(BuildContext context) {
     final store = PerAccountStoreWidget.of(context);
-    final localizations = ZulipLocalizations.of(context);
+    final zulipLocalizations = ZulipLocalizations.of(context);
 
     final values = [
-      ('1f6e0', localizations.userStatusBusy),
-      ('1f4c5', localizations.userStatusInAMeeting),
-      ('1f68c', localizations.userStatusCommuting),
-      ('1f912', localizations.userStatusOutSick),
-      ('1f334', localizations.userStatusVacationing),
-      ('1f3e0', localizations.userStatusWorkingRemotely),
-      ('1f3e2', localizations.userStatusAtTheOffice),
+      ('1f6e0', zulipLocalizations.userStatusBusy),
+      ('1f4c5', zulipLocalizations.userStatusInAMeeting),
+      ('1f68c', zulipLocalizations.userStatusCommuting),
+      ('1f912', zulipLocalizations.userStatusOutSick),
+      ('1f334', zulipLocalizations.userStatusVacationing),
+      ('1f3e0', zulipLocalizations.userStatusWorkingRemotely),
+      ('1f3e2', zulipLocalizations.userStatusAtTheOffice),
     ];
     return [
       for (final (emojiCode, statusText) in values)
@@ -115,7 +114,7 @@ class _SetStatusPageState extends State<SetStatusPage> {
 
   Future<void> handleStatusSave() async {
     final store = PerAccountStoreWidget.of(context);
-    final localizations = ZulipLocalizations.of(context);
+    final zulipLocalizations = ZulipLocalizations.of(context);
 
     Navigator.pop(context);
     if (newStatus == oldStatus) return;
@@ -123,7 +122,7 @@ class _SetStatusPageState extends State<SetStatusPage> {
     try {
       await updateStatus(store.connection, change: statusChange.value);
     } catch (e) {
-      reportErrorToUserBriefly(localizations.updateStatusErrorTitle);
+      reportErrorToUserBriefly(zulipLocalizations.updateStatusErrorTitle);
     }
   }
 
@@ -152,18 +151,18 @@ class _SetStatusPageState extends State<SetStatusPage> {
   @override
   Widget build(BuildContext context) {
     final designVariables = DesignVariables.of(context);
-    final localizations = ZulipLocalizations.of(context);
+    final zulipLocalizations = ZulipLocalizations.of(context);
 
     final suggestions = statusSuggestions(context);
 
     return Scaffold(
-      appBar: ZulipAppBar(title: Text(localizations.setStatusPageTitle),
+      appBar: ZulipAppBar(title: Text(zulipLocalizations.setStatusPageTitle),
         actions: [
           ValueListenableBuilder(
             valueListenable: statusChange,
             builder: (_, _, _) {
               return _ActionButton(
-                label: localizations.statusClearButtonLabel,
+                label: zulipLocalizations.statusClearButtonLabel,
                 icon: ZulipIcons.remove,
                 onPressed: newStatus == UserStatus.zero
                   ? null
@@ -174,7 +173,7 @@ class _SetStatusPageState extends State<SetStatusPage> {
             valueListenable: statusChange,
             builder: (_, change, _) {
               return _ActionButton(
-                label: localizations.statusSaveButtonLabel,
+                label: zulipLocalizations.statusSaveButtonLabel,
                 icon: ZulipIcons.check,
                 onPressed: switch ((change.text, change.emoji)) {
                   (OptionNone(), OptionNone()) => null,
@@ -183,85 +182,86 @@ class _SetStatusPageState extends State<SetStatusPage> {
             }),
         ],
       ),
-      body: Column(children: [
-        Padding(
-          padding: const EdgeInsetsDirectional.only(
-            // In Figma design, this is 16px, but we compensate for that in
-            // the icon button below.
-            start: 8,
-            top: 8, end: 10,
-            // In Figma design, this is 4px, be we compensate for that in
-            // [SingleChildScrollView.padding] below.
-            bottom: 0),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              IconButton(
-                onPressed: chooseStatusEmoji,
-                style: IconButton.styleFrom(
-                  splashFactory: NoSplash.splashFactory,
-                  foregroundColor: designVariables.icon,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  padding: EdgeInsets.symmetric(
-                    vertical: 8,
-                    // In Figma design, there is no horizontal padding, but we
-                    // provide it in order to create a proper tap target size.
-                    horizontal: 8)),
-                icon: Row(spacing: 4, children: [
-                  ValueListenableBuilder(
-                    valueListenable: statusChange,
-                    builder: (_, change, _) {
-                      final emoji = change.emoji.or(oldStatus.emoji);
-                      return emoji == null
-                        ? const Icon(ZulipIcons.smile, size: 24)
-                        : UserStatusEmoji(emoji: emoji, size: 24, neverAnimate: false);
-                    }),
-                  Icon(ZulipIcons.chevron_down, size: 16),
-                ]),
-              ),
-              Expanded(child: TextField(
-                controller: statusTextController,
-                minLines: 1,
-                maxLines: 2,
-                // The limit on the size of the status text is 60 characters.
-                // See: https://zulip.com/api/update-status#parameter-status_text
-                maxLength: 60,
-                cursorColor: designVariables.textInput,
-                textCapitalization: TextCapitalization.sentences,
-                style: TextStyle(fontSize: 19, height: 24 / 19),
-                decoration: InputDecoration(
-                  // TODO: display a counter as suggested in CZO discussion:
-                  //   https://chat.zulip.org/#narrow/channel/530-mobile-design/topic/Set.20user.20status/near/2224549
-                  counterText: '',
-                  hintText: localizations.statusTextHint,
-                  hintStyle: TextStyle(color: designVariables.labelSearchPrompt),
-                  isDense: true,
-                  contentPadding: EdgeInsets.symmetric(
-                    vertical: 8,
-                    // Subtracting 4 pixels to account for the internal
-                    // 4-pixel horizontal padding.
-                    horizontal: 10 - 4,
-                  ),
-                  filled: true,
-                  fillColor: designVariables.bgSearchInput,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide.none,
-                  )))),
-            ]),
-        ),
-        Expanded(child: InsetShadowBox(
-          top: 6, bottom: 6,
-          color: designVariables.mainBackground,
-          child: SingleChildScrollView(
-            padding: EdgeInsets.symmetric(vertical: 6),
-            child: Column(children: [
-              for (final status in suggestions)
-                StatusSuggestionsListEntry(
-                  status: status,
-                  onTap: () => chooseStatusSuggestion(status)),
-            ])))),
-      ]),
+      body: SafeArea(
+        bottom: false,
+        minimum: EdgeInsets.symmetric(horizontal: 8),
+        child: Column(children: [
+          Padding(
+            padding: const EdgeInsetsDirectional.only(
+              top: 8,
+              // In Figma design, this is 4px, be we compensate for that in
+              // [SingleChildScrollView.padding] below.
+              bottom: 0),
+            child: Row(
+              spacing: 4,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                IconButton(
+                  onPressed: chooseStatusEmoji,
+                  style: IconButton.styleFrom(
+                    splashFactory: NoSplash.splashFactory,
+                    foregroundColor: designVariables.icon,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    padding: EdgeInsets.symmetric(
+                      vertical: 8,
+                      // In Figma design, there is no horizontal padding, but we
+                      // provide it in order to create a proper tap target size.
+                      horizontal: 8)),
+                  icon: Row(spacing: 4, children: [
+                    ValueListenableBuilder(
+                      valueListenable: statusChange,
+                      builder: (_, change, _) {
+                        final emoji = change.emoji.or(oldStatus.emoji);
+                        return emoji == null
+                          ? const Icon(ZulipIcons.smile, size: 24)
+                          : UserStatusEmoji(emoji: emoji, size: 24, neverAnimate: false);
+                      }),
+                    Icon(ZulipIcons.chevron_down, size: 16),
+                  ]),
+                ),
+                Expanded(child: TextField(
+                  controller: statusTextController,
+                  minLines: 1,
+                  maxLines: 2,
+                  // The limit on the size of the status text is 60 characters.
+                  // See: https://zulip.com/api/update-status#parameter-status_text
+                  maxLength: 60,
+                  cursorColor: designVariables.textInput,
+                  textCapitalization: TextCapitalization.sentences,
+                  style: TextStyle(fontSize: 19, height: 24 / 19),
+                  decoration: InputDecoration(
+                    // TODO: display a counter as suggested in CZO discussion:
+                    //   https://chat.zulip.org/#narrow/channel/530-mobile-design/topic/Set.20user.20status/near/2224549
+                    counterText: '',
+                    hintText: zulipLocalizations.statusTextHint,
+                    hintStyle: TextStyle(color: designVariables.labelSearchPrompt),
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(
+                      vertical: 8,
+                      // Subtracting 4 pixels to account for the internal
+                      // 4-pixel horizontal padding.
+                      horizontal: 10 - 4,
+                    ),
+                    filled: true,
+                    fillColor: designVariables.bgSearchInput,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide.none,
+                    )))),
+              ]),
+          ),
+          Expanded(child: InsetShadowBox(
+            top: 6,
+            color: designVariables.mainBackground,
+            child: SingleChildScrollView(
+              padding: EdgeInsets.only(top: 6),
+              child: Column(children: [
+                for (final status in suggestions)
+                  StatusSuggestionsListEntry(
+                    status: status,
+                    onTap: () => chooseStatusSuggestion(status)),
+              ])))),
+        ])),
     );
   }
 }
@@ -313,18 +313,11 @@ class StatusSuggestionsListEntry extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final designVariables = DesignVariables.of(context);
-
-    return InkWell(
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: onTap,
-      splashFactory: NoSplash.splashFactory,
-      overlayColor: WidgetStateColor.resolveWith(
-        (states) => states.any((e) => e == WidgetState.pressed)
-          ? designVariables.contextMenuItemBg.withFadedAlpha(0.20)
-          : Colors.transparent,
-      ),
       child: Padding(
-        padding: EdgeInsets.symmetric(vertical: 7, horizontal: 16),
+        padding: EdgeInsets.symmetric(vertical: 7, horizontal: 8),
         child: Row(
           spacing: 8,
           children: [
