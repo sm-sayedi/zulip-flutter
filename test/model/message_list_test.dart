@@ -545,6 +545,165 @@ void main() {
       );
     });
 
+    group('makes multiple requests', () {
+      final mutedUser = eg.user();
+
+      List<Message> streamMessages(int count, {required int fromId}) =>
+        List.generate(count, (i) => eg.streamMessage(id: fromId + i));
+
+      List<Message> mutedDmMessages(int count, {required int fromId}) =>
+        List.generate(count, (i) => eg.dmMessage(id: fromId + i, from: eg.selfUser, to: [mutedUser]));
+
+      group('until enough visible messages', () {
+        // Enough visible messages are at least `kMessageListFetchBatchSize / 2`,
+        // which in the time of writing this (2025-11), they are `100 / 2 = 50`.
+
+        test('fetchOlder', () async {
+          await prepare(users: [mutedUser], mutedUserIds: [mutedUser.userId]);
+          await prepareMessages(foundOldest: false,
+            messages: List.generate(100, (i) => eg.streamMessage(id: 1000 + i)));
+
+          connection.prepare(json: olderResult(
+            anchor: 1000, foundOldest: false,
+            messages: streamMessages(30, fromId: 900) + mutedDmMessages(70, fromId: 930),
+          ).toJson());
+          final fetchFuture = model.fetchOlder();
+          check(model).messages.length.equals(100);
+
+          connection.prepare(json: olderResult(
+            anchor: 900, foundOldest: false,
+            messages: streamMessages(10, fromId: 800) + mutedDmMessages(90, fromId: 810),
+          ).toJson());
+          await Future(() {});
+          check(model).messages.length.equals(130);
+
+          connection.prepare(json: olderResult(
+            anchor: 800, foundOldest: false,
+            messages: streamMessages(9, fromId: 700) + mutedDmMessages(91, fromId: 709),
+          ).toJson());
+          await Future(() {});
+          check(model).messages.length.equals(140);
+
+          connection.prepare(json: olderResult(
+            anchor: 800, foundOldest: false,
+            messages: streamMessages(1, fromId: 600) + mutedDmMessages(99, fromId: 601),
+          ).toJson());
+          await Future(() {});
+          check(model).messages.length.equals(149);
+
+          await fetchFuture;
+          check(model).messages.length.equals(150);
+        });
+
+        test('fetchNewer', () async {
+          await prepare(anchor: AnchorCode.firstUnread,
+            users: [mutedUser], mutedUserIds: [mutedUser.userId]);
+          await prepareMessages(
+            foundOldest: true, foundNewest: false,
+            anchorMessageId: 950,
+            messages: List.generate(100, (i) => eg.streamMessage(id: 900 + i)));
+
+          connection.prepare(json: newerResult(
+            anchor: 1000, foundNewest: false,
+            messages: streamMessages(30, fromId: 1000) + mutedDmMessages(70, fromId: 1030),
+          ).toJson());
+          final fetchFuture = model.fetchNewer();
+          check(model).messages.length.equals(100);
+
+          connection.prepare(json: newerResult(
+            anchor: 900, foundNewest: false,
+            messages: streamMessages(10, fromId: 1100) + mutedDmMessages(90, fromId: 1110),
+          ).toJson());
+          await Future(() {});
+          check(model).messages.length.equals(130);
+
+          connection.prepare(json: newerResult(
+            anchor: 800, foundNewest: false,
+            messages: streamMessages(9, fromId: 1200) + mutedDmMessages(91, fromId: 1209),
+          ).toJson());
+          await Future(() {});
+          check(model).messages.length.equals(140);
+
+          connection.prepare(json: newerResult(
+            anchor: 800, foundNewest: false,
+            messages: streamMessages(1, fromId: 1300) + mutedDmMessages(99, fromId: 1301),
+          ).toJson());
+          await Future(() {});
+          check(model).messages.length.equals(149);
+
+          await fetchFuture;
+          check(model).messages.length.equals(150);
+        });
+      });
+
+      group('until haveOldest/haveNewest', () {
+        test('fetchOlder', () async {
+          await prepare(users: [mutedUser], mutedUserIds: [mutedUser.userId]);
+          await prepareMessages(foundOldest: false,
+            messages: List.generate(100, (i) => eg.streamMessage(id: 1000 + i)));
+
+          connection.prepare(json: olderResult(
+            anchor: 1000, foundOldest: false,
+            messages: streamMessages(30, fromId: 900) + mutedDmMessages(70, fromId: 930),
+          ).toJson());
+          final fetchFuture = model.fetchOlder();
+          check(model).messages.length.equals(100);
+
+          connection.prepare(json: olderResult(
+            anchor: 900, foundOldest: false,
+            messages: streamMessages(10, fromId: 800) + mutedDmMessages(90, fromId: 810),
+          ).toJson());
+          await Future(() {});
+          check(model).messages.length.equals(130);
+
+          connection.prepare(json: olderResult(
+            anchor: 800, foundOldest: true,
+            messages: streamMessages(9, fromId: 700) + mutedDmMessages(91, fromId: 709),
+          ).toJson());
+          await Future(() {});
+          check(model).messages.length.equals(140);
+
+          await fetchFuture;
+          check(model).haveOldest.isTrue();
+          check(model).messages.length.equals(149);
+        });
+
+        test('fetchNewer', () async {
+          await prepare(anchor: AnchorCode.firstUnread,
+            users: [mutedUser], mutedUserIds: [mutedUser.userId]);
+          await prepareMessages(
+            foundOldest: true, foundNewest: false,
+            anchorMessageId: 950,
+            messages: List.generate(100, (i) => eg.streamMessage(id: 900 + i)));
+
+          connection.prepare(json: newerResult(
+            anchor: 1000, foundNewest: false,
+            messages: streamMessages(30, fromId: 1000) + mutedDmMessages(70, fromId: 1030),
+          ).toJson());
+          final fetchFuture = model.fetchNewer();
+          check(model).messages.length.equals(100);
+
+          connection.prepare(json: newerResult(
+            anchor: 900, foundNewest: false,
+            messages: streamMessages(10, fromId: 1100) + mutedDmMessages(90, fromId: 1110),
+          ).toJson());
+          await Future(() {});
+          check(model).messages.length.equals(130);
+
+          connection.prepare(json: newerResult(
+            anchor: 800, foundNewest: true,
+            messages: streamMessages(9, fromId: 1200) + mutedDmMessages(91, fromId: 1209),
+          ).toJson());
+          await Future(() {});
+          check(model).messages.length.equals(140);
+
+          await fetchFuture;
+          check(model).haveNewest.isTrue();
+          check(model).messages.length.equals(149);
+        });
+      });
+    });
+
     test('nop when already fetching older', () async {
       await prepare(anchor: NumericAnchor(1000));
       await prepareMessages(foundOldest: false, foundNewest: false,
@@ -640,10 +799,10 @@ void main() {
     });
 
     test('nop during backoff', () => awaitFakeAsync((async) async {
-      final olderMessages = List.generate(5, (i) => eg.streamMessage());
-      final initialMessages = List.generate(5, (i) => eg.streamMessage());
-      final newerMessages = List.generate(5, (i) => eg.streamMessage());
-      await prepare(anchor: NumericAnchor(initialMessages[2].id));
+      final olderMessages = List.generate(50, (i) => eg.streamMessage());
+      final initialMessages = List.generate(50, (i) => eg.streamMessage());
+      final newerMessages = List.generate(50, (i) => eg.streamMessage());
+      await prepare(anchor: NumericAnchor(initialMessages[25].id));
       await prepareMessages(foundOldest: false, foundNewest: false,
         messages: initialMessages);
       check(connection.takeRequests()).single;
@@ -687,10 +846,10 @@ void main() {
     // TODO(#824): move this test
     test('fetchOlder recent senders track all the messages', () async {
       await prepare();
-      final initialMessages = List.generate(10, (i) => eg.streamMessage(id: 100 + i));
+      final initialMessages = List.generate(50, (i) => eg.streamMessage(id: 100 + i));
       await prepareMessages(foundOldest: false, messages: initialMessages);
 
-      final oldMessages = List.generate(10, (i) => eg.streamMessage(id: 89 + i))
+      final oldMessages = List.generate(50, (i) => eg.streamMessage(id: 49 + i))
         // Not subscribed to the stream with id 10.
         ..add(eg.streamMessage(id: 99, stream: eg.stream(streamId: 10)));
       connection.prepare(json: olderResult(
@@ -699,7 +858,7 @@ void main() {
       ).toJson());
       await model.fetchOlder();
 
-      check(model).messages.length.equals(20);
+      check(model).messages.length.equals(100);
       recent_senders_test.checkMatchesMessages(store.recentSenders,
         [...initialMessages, ...oldMessages]);
     });
@@ -707,22 +866,148 @@ void main() {
     // TODO(#824): move this test
     test('TODO fetchNewer recent senders track all the messages', () async {
       await prepare(anchor: NumericAnchor(100));
-      final initialMessages = List.generate(10, (i) => eg.streamMessage(id: 100 + i));
+      final initialMessages = List.generate(50, (i) => eg.streamMessage(id: 100 + i));
       await prepareMessages(foundOldest: true, foundNewest: false,
         messages: initialMessages);
 
-      final newMessages = List.generate(10, (i) => eg.streamMessage(id: 110 + i))
+      final newMessages = List.generate(50, (i) => eg.streamMessage(id: 150 + i))
         // Not subscribed to the stream with id 10.
-        ..add(eg.streamMessage(id: 120, stream: eg.stream(streamId: 10)));
+        ..add(eg.streamMessage(id: 200, stream: eg.stream(streamId: 10)));
       connection.prepare(json: newerResult(
         anchor: 100, foundNewest: false,
         messages: newMessages,
       ).toJson());
       await model.fetchNewer();
 
-      check(model).messages.length.equals(20);
+      check(model).messages.length.equals(100);
       recent_senders_test.checkMatchesMessages(store.recentSenders,
         [...initialMessages, ...newMessages]);
+    });
+  });
+
+  group('oldMessageId, newMessageId', () {
+    group('fetchInitial', () {
+      test('visible messages', () async {
+        await prepare();
+        check(model)..oldMessageId.isNull()..newMessageId.isNull();
+
+        connection.prepare(json: newestResult(
+          foundOldest: true,
+          messages: List.generate(100, (i) => eg.streamMessage(id: 100 + i)),
+        ).toJson());
+        await model.fetchInitial();
+
+        checkNotifiedOnce();
+        check(model)
+          ..messages.length.equals(100)
+          ..oldMessageId.equals(100)..newMessageId.equals(199);
+      });
+
+      test('invisible messages', () async {
+        final mutedUser = eg.user();
+        await prepare(users: [mutedUser], mutedUserIds: [mutedUser.userId]);
+        check(model)..oldMessageId.isNull()..newMessageId.isNull();
+
+        connection.prepare(json: newestResult(
+          foundOldest: true,
+          messages: List.generate(100,
+            (i) => eg.dmMessage(id: 100 + i, from: eg.selfUser, to: [mutedUser])),
+        ).toJson());
+        await model.fetchInitial();
+
+        checkNotifiedOnce();
+        check(model)
+          ..messages.isEmpty()
+          ..oldMessageId.equals(100)..newMessageId.equals(199);
+      });
+
+      test('no messages found', () async {
+        await prepare();
+        check(model)..oldMessageId.isNull()..newMessageId.isNull();
+
+        connection.prepare(json: newestResult(
+          foundOldest: true,
+          messages: [],
+        ).toJson());
+        await model.fetchInitial();
+
+        checkNotifiedOnce();
+        check(model)
+          ..messages.isEmpty()
+          ..oldMessageId.isNull()..newMessageId.isNull();
+      });
+    });
+
+    group('fetching more', () {
+      test('visible messages', () async {
+        await prepare(anchor: AnchorCode.firstUnread);
+        check(model)..oldMessageId.isNull()..newMessageId.isNull();
+
+        await prepareMessages(
+          foundOldest: false, foundNewest: false,
+          anchorMessageId: 250,
+          messages: List.generate(100, (i) => eg.streamMessage(id: 200 + i)));
+        check(model)
+          ..messages.length.equals(100)
+          ..oldMessageId.equals(200)..newMessageId.equals(299);
+
+        connection.prepare(json: olderResult(
+          anchor: 200, foundOldest: true,
+          messages: List.generate(100, (i) => eg.streamMessage(id: 100 + i)),
+        ).toJson());
+        await model.fetchOlder();
+        checkNotified(count: 2);
+        check(model)
+          ..messages.length.equals(200)
+          ..oldMessageId.equals(100)..newMessageId.equals(299);
+
+        connection.prepare(json: newerResult(
+          anchor: 299, foundNewest: true,
+          messages: List.generate(100, (i) => eg.streamMessage(id: 300 + i)),
+        ).toJson());
+        await model.fetchNewer();
+        checkNotified(count: 2);
+        check(model)
+          ..messages.length.equals(300)
+          ..oldMessageId.equals(100)..newMessageId.equals(399);
+      });
+
+      test('invisible messages', () async {
+        final mutedUser = eg.user();
+        await prepare(anchor: AnchorCode.firstUnread,
+          users: [mutedUser], mutedUserIds: [mutedUser.userId]);
+        check(model)..oldMessageId.isNull()..newMessageId.isNull();
+
+        await prepareMessages(
+          foundOldest: false, foundNewest: false,
+          anchorMessageId: 250,
+          messages: List.generate(100, (i) => eg.streamMessage(id: 200 + i)));
+        check(model)
+          ..messages.length.equals(100)
+          ..oldMessageId.equals(200)..newMessageId.equals(299);
+
+        connection.prepare(json: olderResult(
+          anchor: 200, foundOldest: true,
+          messages: List.generate(100,
+            (i) => eg.dmMessage(id: 100 + i, from: eg.selfUser, to: [mutedUser])),
+        ).toJson());
+        await model.fetchOlder();
+        checkNotified(count: 2);
+        check(model)
+          ..messages.length.equals(100)
+          ..oldMessageId.equals(100)..newMessageId.equals(299);
+
+        connection.prepare(json: newerResult(
+          anchor: 299, foundNewest: true,
+          messages: List.generate(100,
+            (i) => eg.dmMessage(id: 300 + i, from: eg.selfUser, to: [mutedUser])),
+        ).toJson());
+        await model.fetchNewer();
+        checkNotified(count: 2);
+        check(model)
+          ..messages.length.equals(100)
+          ..oldMessageId.equals(100)..newMessageId.equals(399);
+      });
     });
   });
 
@@ -2822,11 +3107,19 @@ void main() {
     Message dmMessage(int id) =>
       eg.dmMessage(id: id, from: eg.selfUser, to: [], timestamp: timestamp);
 
+    List<Message> streamMessages({required int fromId, required int toId}) {
+      assert(fromId > 0 && fromId <= toId);
+      return [
+        for (int id = fromId; id <= toId; id++)
+          streamMessage(id)
+      ];
+    }
+
     // First, test fetchInitial, where some headers are needed and others not.
     await prepare(narrow: CombinedFeedNarrow());
     connection.prepare(json: newestResult(
       foundOldest: false,
-      messages: [streamMessage(10), streamMessage(11), dmMessage(12)],
+      messages: [streamMessage(200), streamMessage(201), dmMessage(202)],
     ).toJson());
     await model.fetchInitial();
     checkNotifiedOnce();
@@ -2835,7 +3128,7 @@ void main() {
     connection.prepare(json: olderResult(
       anchor: model.messages[0].id,
       foundOldest: false,
-      messages: [streamMessage(7), streamMessage(8), dmMessage(9)],
+      messages: [...streamMessages(fromId: 150, toId: 198), dmMessage(199)],
     ).toJson());
     await model.fetchOlder();
     checkNotified(count: 2);
@@ -2844,17 +3137,17 @@ void main() {
     connection.prepare(json: olderResult(
       anchor: model.messages[0].id,
       foundOldest: false,
-      messages: [streamMessage(6)],
+      messages: streamMessages(fromId: 100, toId: 149),
     ).toJson());
     await model.fetchOlder();
     checkNotified(count: 2);
 
     // Then test MessageEvent, where a new header is needed…
-    await store.addMessage(streamMessage(13));
+    await store.addMessage(streamMessage(203));
     checkNotifiedOnce();
 
     // … and where it's not.
-    await store.addMessage(streamMessage(14));
+    await store.addMessage(streamMessage(204));
     checkNotifiedOnce();
 
     // Then test UpdateMessageEvent edits, where a header is and remains needed…
@@ -2892,7 +3185,7 @@ void main() {
     connection.prepare(json: olderResult(
       anchor: model.messages[0].id,
       foundOldest: true,
-      messages: [streamMessage(5)],
+      messages: [streamMessage(99)],
     ).toJson());
     await model.fetchOlder();
     checkNotified(count: 2);
@@ -2904,16 +3197,16 @@ void main() {
     final outboxMessageIds = store.outboxMessages.keys.toList();
     // Then test removing the first outbox message…
     await store.handleEvent(eg.messageEvent(
-      dmMessage(15), localMessageId: outboxMessageIds.first));
+      dmMessage(205), localMessageId: outboxMessageIds.first));
     checkNotifiedOnce();
 
     // … and handling a new non-outbox message…
-    await store.handleEvent(eg.messageEvent(streamMessage(16)));
+    await store.handleEvent(eg.messageEvent(streamMessage(206)));
     checkNotifiedOnce();
 
     // … and removing the second outbox message.
     await store.handleEvent(eg.messageEvent(
-      dmMessage(17), localMessageId: outboxMessageIds.last));
+      dmMessage(207), localMessageId: outboxMessageIds.last));
     checkNotifiedOnce();
   }));
 
@@ -3206,6 +3499,8 @@ void checkInvariants(MessageListView model) {
     check(model)
       ..messages.isEmpty()
       ..outboxMessages.isEmpty()
+      ..oldMessageId.isNull()
+      ..newMessageId.isNull()
       ..haveOldest.isFalse()
       ..haveNewest.isFalse()
       ..busyFetchingMore.isFalse();
@@ -3394,6 +3689,8 @@ extension MessageListViewChecks on Subject<MessageListView> {
   Subject<List<MessageListItem>> get items => has((x) => x.items, 'items');
   Subject<int> get middleItem => has((x) => x.middleItem, 'middleItem');
   Subject<bool> get fetched => has((x) => x.fetched, 'fetched');
+  Subject<int?> get oldMessageId => has((x) => x.oldMessageId, 'oldMessageId');
+  Subject<int?> get newMessageId => has((x) => x.newMessageId, 'newMessageId');
   Subject<bool> get haveOldest => has((x) => x.haveOldest, 'haveOldest');
   Subject<bool> get haveNewest => has((x) => x.haveNewest, 'haveNewest');
   Subject<bool> get busyFetchingMore => has((x) => x.busyFetchingMore, 'busyFetchingMore');

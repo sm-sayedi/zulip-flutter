@@ -838,8 +838,6 @@ class _MessageListState extends State<MessageList> with PerAccountStoreAwareStat
     model.fetchInitial();
   }
 
-  bool _prevFetched = false;
-
   void _modelChanged() {
     // When you're scrolling quickly, our mark-as-read requests include the
     // messages *between* _messagesRecentlyInViewport and the messages currently
@@ -866,14 +864,13 @@ class _MessageListState extends State<MessageList> with PerAccountStoreAwareStat
       // This method was called because that just changed.
     });
 
-    if (!_prevFetched && model.fetched && model.messages.isEmpty) {
+    if (model.messages.isEmpty && model.haveOldest && model.haveNewest) {
       // If the fetch came up empty, there's nothing to read,
       // so opening the keyboard won't be bothersome and could be helpful.
       // It's definitely helpful if we got here from the new-DM page.
       MessageListPage.ancestorOf(context)
         .composeBoxState?.controller.requestFocusIfUnfocused();
     }
-    _prevFetched = model.fetched;
   }
 
   /// Find the range of message IDs on screen, as a (first, last) tuple,
@@ -1222,7 +1219,8 @@ class _MessageListState extends State<MessageList> with PerAccountStoreAwareStat
       return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         TypingStatusWidget(narrow: widget.narrow),
         // TODO perhaps offer mark-as-read even when not done fetching?
-        MarkAsReadWidget(narrow: widget.narrow),
+        if (model.messages.isNotEmpty)
+          MarkAsReadWidget(narrow: widget.narrow),
         // To reinforce that the end of the feed has been reached:
         //   https://chat.zulip.org/#narrow/channel/48-mobile/topic/space.20at.20end.20of.20thread/near/2203391
         const SizedBox(height: 12),

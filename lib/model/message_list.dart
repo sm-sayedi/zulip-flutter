@@ -145,6 +145,26 @@ mixin _MessageSequence {
   /// The corresponding item index is [middleItem].
   int middleMessage = 0;
 
+  /// The ID of the oldest known message so far in this narrow.
+  ///
+  /// This will be `null` if no messages of this narrow are fetched yet.
+  /// Having a non-null value for this doesn't always mean [haveOldest] is `true`.
+  ///
+  /// The related message may not appear in [messages] because it
+  /// is muted in one way or another.
+  int? get oldMessageId => _oldMessageId;
+  int? _oldMessageId;
+
+  /// The ID of the newest known message so far in this narrow.
+  ///
+  /// This will be `null` if no messages of this narrow are fetched yet.
+  /// Having a non-null value for this doesn't always mean [haveNewest] is `true`.
+  ///
+  /// The related message may not appear in [messages] because it
+  /// is muted in one way or another.
+  int? get newMessageId => _newMessageId;
+  int? _newMessageId;
+
   /// Whether [messages] and [items] represent the results of a fetch.
   ///
   /// This allows the UI to distinguish "still working on fetching messages"
@@ -409,6 +429,8 @@ mixin _MessageSequence {
     generation += 1;
     messages.clear();
     middleMessage = 0;
+    _oldMessageId = null;
+    _newMessageId = null;
     outboxMessages.clear();
     _haveOldest = false;
     _haveNewest = false;
@@ -775,6 +797,7 @@ class MessageListView with ChangeNotifier, _MessageSequence {
   Future<void> fetchInitial() async {
     assert(!fetched && !haveOldest && !haveNewest && !busyFetchingMore);
     assert(messages.isEmpty && contents.isEmpty);
+    assert(oldMessageId == null && newMessageId == null);
 
     if (narrow case KeywordSearchNarrow(keyword: '')) {
       // The server would reject an empty keyword search; skip the request.
@@ -797,6 +820,9 @@ class MessageListView with ChangeNotifier, _MessageSequence {
       allowEmptyTopicName: true,
     );
     if (this.generation > generation) return;
+
+    _oldMessageId = result.messages.firstOrNull?.id;
+    _newMessageId = result.messages.lastOrNull?.id;
 
     _adjustNarrowForTopicPermalink(result.messages.firstOrNull);
 
@@ -869,25 +895,32 @@ class MessageListView with ChangeNotifier, _MessageSequence {
   /// That makes this method suitable to call frequently, e.g. every frame,
   /// whenever it looks likely to be useful to have more messages.
   Future<void> fetchOlder() async {
-    if (haveOldest) return;
-    if (busyFetchingMore) return;
-    assert(fetched);
-    assert(messages.isNotEmpty);
-    await _fetchMore(
-      anchor: NumericAnchor(messages[0].id),
-      numBefore: kMessageListFetchBatchSize,
-      numAfter: 0,
-      processResult: (result) {
-        store.reconcileMessages(result.messages);
-        store.recentSenders.handleMessages(result.messages); // TODO(#824)
+    final generation = this.generation;
+    int visibleMessageCount = 0;
+    do {
+      if (haveOldest) return;
+      if (busyFetchingMore) return;
+      assert(fetched);
+      assert(oldMessageId != null);
+      await _fetchMore(
+        anchor: NumericAnchor(oldMessageId!),
+        numBefore: kMessageListFetchBatchSize,
+        numAfter: 0,
+        processResult: (result) {
+          _oldMessageId = result.messages.firstOrNull?.id ?? oldMessageId;
+          store.reconcileMessages(result.messages);
+          store.recentSenders.handleMessages(result.messages); // TODO(#824)
 
-        final fetchedMessages = _allMessagesVisible
-          ? result.messages // Avoid unnecessarily copying the list.
-          : result.messages.where(_messageVisible);
+          final fetchedMessages = _allMessagesVisible
+            ? result.messages // Avoid unnecessarily copying the list.
+            : result.messages.where(_messageVisible);
 
-        _insertAllMessages(0, fetchedMessages);
-        _haveOldest = result.foundOldest;
-      });
+          _insertAllMessages(0, fetchedMessages);
+          _haveOldest = result.foundOldest;
+          visibleMessageCount += fetchedMessages.length;
+        });
+    } while (visibleMessageCount < kMessageListFetchBatchSize / 2
+             && this.generation == generation);
   }
 
   /// Fetch the next batch of newer messages, if applicable.
@@ -899,29 +932,36 @@ class MessageListView with ChangeNotifier, _MessageSequence {
   /// That makes this method suitable to call frequently, e.g. every frame,
   /// whenever it looks likely to be useful to have more messages.
   Future<void> fetchNewer() async {
-    if (haveNewest) return;
-    if (busyFetchingMore) return;
-    assert(fetched);
-    assert(messages.isNotEmpty);
-    await _fetchMore(
-      anchor: NumericAnchor(messages.last.id),
-      numBefore: 0,
-      numAfter: kMessageListFetchBatchSize,
-      processResult: (result) {
-        store.reconcileMessages(result.messages);
-        store.recentSenders.handleMessages(result.messages); // TODO(#824)
+    final generation = this.generation;
+    int visibleMessageCount = 0;
+    do {
+      if (haveNewest) return;
+      if (busyFetchingMore) return;
+      assert(fetched);
+      assert(newMessageId != null);
+      await _fetchMore(
+        anchor: NumericAnchor(newMessageId!),
+        numBefore: 0,
+        numAfter: kMessageListFetchBatchSize,
+        processResult: (result) {
+          _newMessageId = result.messages.lastOrNull?.id ?? newMessageId;
+          store.reconcileMessages(result.messages);
+          store.recentSenders.handleMessages(result.messages); // TODO(#824)
 
-        for (final message in result.messages) {
-          if (_messageVisible(message)) {
-            _addMessage(message);
+          for (final message in result.messages) {
+            if (_messageVisible(message)) {
+              _addMessage(message);
+              visibleMessageCount++;
+            }
           }
-        }
-        _haveNewest = result.foundNewest;
+          _haveNewest = result.foundNewest;
 
-        if (haveNewest) {
-          _syncOutboxMessagesFromStore();
-        }
-      });
+          if (haveNewest) {
+            _syncOutboxMessagesFromStore();
+          }
+        });
+    } while (visibleMessageCount < kMessageListFetchBatchSize / 2
+             && this.generation == generation);
   }
 
   Future<void> _fetchMore({
