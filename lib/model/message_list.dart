@@ -83,22 +83,33 @@ class MessageListOutboxMessageItem extends MessageListMessageBaseItem {
   ]);
 }
 
-/// The status of outstanding or recent fetch requests from a [MessageListView].
-enum FetchingStatus {
-  /// The model has not made any fetch requests (since its last reset, if any).
+/// The status of outstanding or recent `fetchInitial` request from a [MessageListView].
+enum FetchingInitialStatus {
+  /// The model has not made a `fetchInitial` request (since its last reset, if any).
   unstarted,
 
   /// The model has made a `fetchInitial` request, which hasn't succeeded.
-  fetchInitial,
+  fetching,
 
-  /// The model made a successful `fetchInitial` request,
-  /// and has no outstanding requests or backoff.
+  /// The model made a successful `fetchInitial` request.
+  idle,
+}
+
+/// The status of outstanding or recent "fetch more" request from a [MessageListView].
+///
+/// By a "fetch more" request we mean a `fetchOlder` or a `fetchNewer` request.
+enum FetchingMoreStatus {
+  /// The model has not made the "fetch more" request (since its last reset, if any).
+  unstarted,
+
+  /// The model has made the "fetch more" request, which hasn't succeeded.
+  fetching,
+
+  /// The model made a successful "fetch more" request,
+  /// and has no outstanding request of the same kind or backoff.
   idle,
 
-  /// The model has an active `fetchOlder` or `fetchNewer` request.
-  fetchingMore,
-
-  /// The model is in a backoff period from a failed request.
+  /// The model is in a backoff period from the failed "fetch more" request.
   backoff,
 }
 
@@ -125,7 +136,7 @@ mixin _MessageSequence {
   ///
   /// This may or may not represent all the message history that
   /// conceptually belongs in this message list.
-  /// That information is expressed in [fetched], [haveOldest], [haveNewest].
+  /// That information is expressed in [initialFetched], [haveOldest], [haveNewest].
   ///
   /// This also may or may not represent all the message history that
   /// conceptually belongs in this narrow because some messages might be
@@ -165,12 +176,15 @@ mixin _MessageSequence {
   int? get newMessageId => _newMessageId;
   int? _newMessageId;
 
-  /// Whether [messages] and [items] represent the results of a fetch.
+  /// Whether the first batch of messages for this narrow is fetched yet.
   ///
-  /// This allows the UI to distinguish "still working on fetching messages"
-  /// from "there are in fact no messages here".
-  bool get fetched => switch (_status) {
-    FetchingStatus.unstarted || FetchingStatus.fetchInitial => false,
+  /// Some or all of the fetched messages may not make it to [messages]
+  /// and [items] if they're muted in one way or another.
+  ///
+  /// This allows the UI to distinguish "still working on fetching first batch
+  /// of messages" from "there are in fact no messages here".
+  bool get initialFetched => switch (_fetchInitialStatus) {
+    .unstarted || .fetching => false,
     _ => true,
   };
 
@@ -187,19 +201,34 @@ mixin _MessageSequence {
   bool _haveNewest = false;
 
   /// Whether this message list is currently busy when it comes to
-  /// fetching more messages.
+  /// fetching older messages.
   ///
-  /// Here "busy" means a new call to fetch more messages would do nothing,
+  /// Here "busy" means a new call to fetch older messages would do nothing,
   /// rather than make any request to the server,
   /// as a result of an existing recent request.
   /// This is true both when the recent request is still outstanding,
   /// and when it failed and the backoff from that is still in progress.
-  bool get busyFetchingMore => switch (_status) {
-    FetchingStatus.fetchingMore || FetchingStatus.backoff => true,
+  bool get busyFetchingOlder => switch(_fetchOlderStatus) {
+    .fetching || .backoff => true,
     _ => false,
   };
 
-  FetchingStatus _status = FetchingStatus.unstarted;
+  /// Whether this message list is currently busy when it comes to
+  /// fetching newer messages.
+  ///
+  /// Here "busy" means a new call to fetch older messages would do nothing,
+  /// rather than make any request to the server,
+  /// as a result of an existing recent request.
+  /// This is true both when the recent request is still outstanding,
+  /// and when it failed and the backoff from that is still in progress.
+  bool get busyFetchingNewer => switch(_fetchNewerStatus) {
+    .fetching || .backoff => true,
+    _ => false,
+  };
+
+  FetchingInitialStatus _fetchInitialStatus = .unstarted;
+  FetchingMoreStatus _fetchOlderStatus = .unstarted;
+  FetchingMoreStatus _fetchNewerStatus = .unstarted;
 
   BackoffMachine? _fetchBackoffMachine;
 
@@ -228,7 +257,7 @@ mixin _MessageSequence {
   /// [MessageListOutboxMessageItem]s corresponding to [outboxMessages].
   ///
   /// This information is completely derived from [messages], [outboxMessages],
-  /// and the flags [haveOldest], [haveNewest], and [busyFetchingMore].
+  /// and the flags [haveOldest], [haveNewest], [busyFetchingNewer], and [busyFetchingOlder].
   /// It exists as an optimization, to memoize that computation.
   ///
   /// See also [middleItem], an index which divides this list
@@ -434,7 +463,9 @@ mixin _MessageSequence {
     outboxMessages.clear();
     _haveOldest = false;
     _haveNewest = false;
-    _status = FetchingStatus.unstarted;
+    _fetchInitialStatus = .unstarted;
+    _fetchOlderStatus = .unstarted;
+    _fetchNewerStatus = .unstarted;
     _fetchBackoffMachine = null;
     contents.clear();
     items.clear();
@@ -786,16 +817,29 @@ class MessageListView with ChangeNotifier, _MessageSequence {
     }
   }
 
-  void _setStatus(FetchingStatus value, {FetchingStatus? was}) {
-    assert(was == null || _status == was);
-    _status = value;
-    if (!fetched) return;
+  void _setInitialStatus(FetchingInitialStatus value, {FetchingInitialStatus? was}) {
+    assert(was == null || _fetchInitialStatus == was);
+    _fetchInitialStatus = value;
+    if (!initialFetched) return;
+    notifyListeners();
+  }
+
+  void _setOlderStatus(FetchingMoreStatus value, {FetchingMoreStatus? was}) {
+    assert(was == null || _fetchOlderStatus == was);
+    _fetchOlderStatus = value;
+    notifyListeners();
+  }
+
+  void _setNewerStatus(FetchingMoreStatus value, {FetchingMoreStatus? was}) {
+    assert(was == null || _fetchNewerStatus == was);
+    _fetchNewerStatus = value;
     notifyListeners();
   }
 
   /// Fetch messages, starting from scratch.
   Future<void> fetchInitial() async {
-    assert(!fetched && !haveOldest && !haveNewest && !busyFetchingMore);
+    assert(!initialFetched && !haveOldest && !haveNewest
+           && !busyFetchingOlder && !busyFetchingNewer);
     assert(messages.isEmpty && contents.isEmpty);
     assert(oldMessageId == null && newMessageId == null);
 
@@ -805,11 +849,11 @@ class MessageListView with ChangeNotifier, _MessageSequence {
       //   probably better if the UI code doesn't take it to this point.
       _haveOldest = true;
       _haveNewest = true;
-      _setStatus(FetchingStatus.idle, was: FetchingStatus.unstarted);
+      _setInitialStatus(.idle, was: .unstarted);
       return;
     }
 
-    _setStatus(FetchingStatus.fetchInitial, was: FetchingStatus.unstarted);
+    _setInitialStatus(.fetching, was: .unstarted);
     // TODO schedule all this in another isolate
     final generation = this.generation;
     final result = await getMessages(store.connection,
@@ -851,7 +895,7 @@ class MessageListView with ChangeNotifier, _MessageSequence {
       _syncOutboxMessagesFromStore();
     }
 
-    _setStatus(FetchingStatus.idle, was: FetchingStatus.fetchInitial);
+    _setInitialStatus(.idle, was: .fetching);
   }
 
   /// Update [narrow] for the result of a "with" narrow (topic permalink) fetch.
@@ -889,23 +933,24 @@ class MessageListView with ChangeNotifier, _MessageSequence {
   /// Fetch the next batch of older messages, if applicable.
   ///
   /// If there are no older messages to fetch (i.e. if [haveOldest]),
-  /// or if this message list is already busy fetching more messages
-  /// (i.e. if [busyFetchingMore], which includes backoff from failed requests),
+  /// or if this message list is already busy fetching older messages
+  /// (i.e. if [busyFetchingOlder], which includes backoff from failed requests),
   /// then this method does nothing and immediately returns.
   /// That makes this method suitable to call frequently, e.g. every frame,
-  /// whenever it looks likely to be useful to have more messages.
+  /// whenever it looks likely to be useful to have older messages.
   Future<void> fetchOlder() async {
     final generation = this.generation;
     int visibleMessageCount = 0;
     do {
       if (haveOldest) return;
-      if (busyFetchingMore) return;
-      assert(fetched);
+      if (busyFetchingOlder) return;
+      assert(initialFetched);
       assert(oldMessageId != null);
       await _fetchMore(
         anchor: NumericAnchor(oldMessageId!),
         numBefore: kMessageListFetchBatchSize,
         numAfter: 0,
+        setStatus: _setOlderStatus,
         processResult: (result) {
           _oldMessageId = result.messages.firstOrNull?.id ?? oldMessageId;
           store.reconcileMessages(result.messages);
@@ -926,23 +971,24 @@ class MessageListView with ChangeNotifier, _MessageSequence {
   /// Fetch the next batch of newer messages, if applicable.
   ///
   /// If there are no newer messages to fetch (i.e. if [haveNewest]),
-  /// or if this message list is already busy fetching more messages
-  /// (i.e. if [busyFetchingMore], which includes backoff from failed requests),
+  /// or if this message list is already busy fetching newer messages
+  /// (i.e. if [busyFetchingNewer], which includes backoff from failed requests),
   /// then this method does nothing and immediately returns.
   /// That makes this method suitable to call frequently, e.g. every frame,
-  /// whenever it looks likely to be useful to have more messages.
+  /// whenever it looks likely to be useful to have newer messages.
   Future<void> fetchNewer() async {
     final generation = this.generation;
     int visibleMessageCount = 0;
     do {
       if (haveNewest) return;
-      if (busyFetchingMore) return;
-      assert(fetched);
+      if (busyFetchingNewer) return;
+      assert(initialFetched);
       assert(newMessageId != null);
       await _fetchMore(
         anchor: NumericAnchor(newMessageId!),
         numBefore: 0,
         numAfter: kMessageListFetchBatchSize,
+        setStatus: _setNewerStatus,
         processResult: (result) {
           _newMessageId = result.messages.lastOrNull?.id ?? newMessageId;
           store.reconcileMessages(result.messages);
@@ -968,12 +1014,13 @@ class MessageListView with ChangeNotifier, _MessageSequence {
     required Anchor anchor,
     required int numBefore,
     required int numAfter,
+    required void Function(FetchingMoreStatus value, {FetchingMoreStatus? was}) setStatus,
     required void Function(GetMessagesResult) processResult,
   }) async {
     assert(narrow is! TopicNarrow
       // We only intend to send "with" in [fetchInitial]; see there.
       || (narrow as TopicNarrow).with_ == null);
-    _setStatus(FetchingStatus.fetchingMore, was: FetchingStatus.idle);
+    setStatus(.fetching);
     final generation = this.generation;
     bool hasFetchError = false;
     try {
@@ -994,14 +1041,14 @@ class MessageListView with ChangeNotifier, _MessageSequence {
     } finally {
       if (this.generation == generation) {
         if (hasFetchError) {
-          _setStatus(FetchingStatus.backoff, was: FetchingStatus.fetchingMore);
+          setStatus(.backoff, was: .fetching);
           unawaited((_fetchBackoffMachine ??= BackoffMachine())
             .wait().then((_) {
               if (this.generation != generation) return;
-              _setStatus(FetchingStatus.idle, was: FetchingStatus.backoff);
+              setStatus(.idle, was: .backoff);
             }));
         } else {
-          _setStatus(FetchingStatus.idle, was: FetchingStatus.fetchingMore);
+          setStatus(.idle, was: .fetching);
           _fetchBackoffMachine = null;
         }
       }
@@ -1013,7 +1060,7 @@ class MessageListView with ChangeNotifier, _MessageSequence {
   /// This will set [anchor] to [AnchorCode.newest],
   /// and cause messages to be re-fetched from scratch.
   void jumpToEnd() {
-    assert(fetched);
+    assert(initialFetched);
     assert(!haveNewest);
     assert(anchor != AnchorCode.newest);
     _anchor = AnchorCode.newest;
@@ -1095,7 +1142,7 @@ class MessageListView with ChangeNotifier, _MessageSequence {
         // TODO get the newly-unmuted messages from the message store
         // For now, we simplify the task by just refetching this message list
         // from scratch.
-        if (fetched) {
+        if (initialFetched) {
           _reset();
           notifyListeners();
           fetchInitial();
@@ -1123,7 +1170,7 @@ class MessageListView with ChangeNotifier, _MessageSequence {
         // TODO get the newly-unmuted messages from the message store
         // For now, we simplify the task by just refetching this message list
         // from scratch.
-        if (fetched) {
+        if (initialFetched) {
           _reset();
           notifyListeners();
           fetchInitial();

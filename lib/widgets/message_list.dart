@@ -1026,7 +1026,7 @@ class _MessageListState extends State<MessageList> with PerAccountStoreAwareStat
   Widget build(BuildContext context) {
     final zulipLocalizations = ZulipLocalizations.of(context);
 
-    if (!model.fetched) return const Center(child: CircularProgressIndicator());
+    if (!model.initialFetched) return const Center(child: CircularProgressIndicator());
 
     if (model.items.isEmpty && model.haveNewest && model.haveOldest) {
       final String header;
@@ -1206,11 +1206,9 @@ class _MessageListState extends State<MessageList> with PerAccountStoreAwareStat
     // Else if we're busy with fetching, then show a loading indicator.
     //
     // This applies even if the fetch is over, but failed, and we're still
-    // in backoff from it; and even if the fetch is/was for the other direction.
-    // The loading indicator really means "busy, working on it"; and that's the
-    // right summary even if the fetch is internally queued behind other work.
+    // in backoff from it.
     return model.haveOldest ? const _MessageListHistoryStart()
-      : model.busyFetchingMore ? const _MessageListLoadingMore()
+      : model.busyFetchingOlder ? const _MessageListLoadingMore()
       : const SizedBox.shrink();
   }
 
@@ -1225,7 +1223,7 @@ class _MessageListState extends State<MessageList> with PerAccountStoreAwareStat
         //   https://chat.zulip.org/#narrow/channel/48-mobile/topic/space.20at.20end.20of.20thread/near/2203391
         const SizedBox(height: 12),
       ]);
-    } else if (model.busyFetchingMore) {
+    } else if (model.busyFetchingNewer) {
       // See [_buildStartCap] for why this condition shows a loading indicator.
       return const _MessageListLoadingMore();
     } else {
