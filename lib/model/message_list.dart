@@ -937,23 +937,20 @@ class MessageListView with ChangeNotifier, _MessageSequence {
     final generation = this.generation;
     bool hasFetchError = false;
     try {
-      final GetMessagesResult result;
-      try {
-        result = await getMessages(store.connection,
-          narrow: narrow.apiEncode(),
-          anchor: anchor,
-          includeAnchor: false,
-          numBefore: numBefore,
-          numAfter: numAfter,
-          allowEmptyTopicName: true,
-        );
-      } catch (e) {
-        hasFetchError = true;
-        rethrow;
-      }
+      final result = await getMessages(store.connection,
+        narrow: narrow.apiEncode(),
+        anchor: anchor,
+        includeAnchor: false,
+        numBefore: numBefore,
+        numAfter: numAfter,
+        allowEmptyTopicName: true,
+      );
       if (this.generation > generation) return;
 
       processResult(result);
+    } catch (e) {
+      hasFetchError = true;
+      rethrow;
     } finally {
       if (this.generation == generation) {
         if (hasFetchError) {
