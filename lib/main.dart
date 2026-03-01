@@ -13,6 +13,7 @@ void main() {
     debugLogEnabled = true;
     return true;
   }());
+  // A change.
   LicenseRegistry.addLicense(additionalLicenses);
   WidgetsFlutterBinding.ensureInitialized();
   LiveZulipBinding.ensureInitialized();
