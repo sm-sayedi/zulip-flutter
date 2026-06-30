@@ -1411,10 +1411,46 @@ class _EmptyMessageListPlaceholder extends StatelessWidget {
           onTapMessageLink: () => PlatformActions.launchUrl(context,
             store.tryResolveUrl('/help/star-a-message')!));
 
-      case KeywordSearchNarrow():
-        return PageBodyEmptyContentPlaceholder(
-          header: zulipLocalizations.emptyMessageListSearch);
+      case KeywordSearchNarrow(:final keyword):
+        return Column(
+          children: [
+            PageBodyEmptyContentPlaceholder(
+              header: zulipLocalizations.emptyMessageListSearch),
+            if (hasStopwords(query: keyword, stopwords: store.stopWords))
+              stopwordsMessage(context: context, query: keyword),
+          ],
+        );
     }
+  }
+
+  bool hasStopwords({required String query, required List<String> stopwords}) {
+    return Set<String>.from(query.split(' '))
+      .intersection(Set.from(stopwords))
+      .isNotEmpty;
+  }
+
+  Widget stopwordsMessage({required BuildContext context, required String query}) {
+    final stopwords = PerAccountStoreWidget.of(context).stopWords;
+    final queryWords = query.split(' ');
+    final List<InlineSpan> spans = [
+      TextSpan(text: 'Common words were excluded from your search:\n'),
+    ];
+    for (final queryWord in queryWords) {
+      spans.add(TextSpan(
+        text: queryWord,
+        style: TextStyle(
+          decoration: stopwords.contains(queryWord) ? .lineThrough : null)));
+      spans.add(TextSpan(text: ' '));
+    }
+    spans.removeLast();
+
+    return Text.rich(TextSpan(children: spans),
+      textAlign: .center,
+      style: TextStyle(
+        color: DesignVariables.of(context).labelSearchPrompt,
+        fontSize: 17,
+        height: 23 / 17,
+      ).merge(weightVariableTextStyle(context, wght: 500)));
   }
 }
 
