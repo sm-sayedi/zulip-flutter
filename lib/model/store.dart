@@ -689,6 +689,7 @@ class PerAccountStore extends PerAccountStoreBase with
       realm: realm,
       emoji: EmojiStoreImpl(core: core,
         allRealmEmoji: initialSnapshot.realmEmoji),
+      stopWords: initialSnapshot.stopWords,
       userSettings: initialSnapshot.userSettings,
       pushDevices: PushDeviceManager(core: core,
         devices: initialSnapshot.devices ?? {}),
@@ -716,6 +717,7 @@ class PerAccountStore extends PerAccountStoreBase with
     required this._groups,
     required this._realm,
     required this._emoji,
+    required this.stopWords,
     required this.userSettings,
     required this.pushDevices,
     required this._savedSnippets,
@@ -778,6 +780,8 @@ class PerAccountStore extends PerAccountStoreBase with
   @override
   EmojiStore get emojiStore => _emoji;
   final EmojiStoreImpl _emoji;
+
+  final List<String> stopWords;
 
   //|//////////////////////////////
   // Data attached to the self-account on the realm.
